@@ -5,6 +5,13 @@ import { generatePDFData } from './pdfGenerator';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
+// HELPER: Display Date as DD-MM-YYYY
+const formatDateIN = (dateStr) => {
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split('-');
+  return `${d}-${m}-${y}`;
+};
+
 // ==========================================
 // 1. POPUP COMPONENT 
 // ==========================================
@@ -24,7 +31,7 @@ const TransactionPopup = ({ formMode, formData, setFormData, setFormMode, handle
             }}
             className="border-2 border-orange-200 p-3 rounded text-xl font-bold text-orange-700 bg-orange-50"
           >
-            {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {d.toLocaleString()}</option>)}
+            {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {d.toLocaleString('en-IN')}</option>)}
           </select>
           <div className="flex gap-2">
             <div className="flex-1">
@@ -41,6 +48,7 @@ const TransactionPopup = ({ formMode, formData, setFormData, setFormMode, handle
           <label className="text-sm font-bold text-gray-700">Name & Address</label>
           <textarea rows="2" value={formData.donor_name} onChange={(e) => setFormData({...formData, donor_name: e.target.value})} className="border p-2 rounded text-lg"></textarea>
           <label className="text-sm font-bold text-gray-700">Date</label>
+          {/* Note: Input Type Date MUST use YYYY-MM-DD for value, but user sees system format */}
           <input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className="border p-2 rounded"/>
           <div className="flex gap-2 mt-4">
             <button type="button" onClick={() => setFormMode(null)} className="flex-1 bg-gray-200 py-3 rounded font-bold">Cancel</button>
@@ -75,7 +83,7 @@ const ReportPopup = ({ isOpen, onClose, DENOMINATIONS, onGenerate }) => {
             <label className="text-sm font-bold text-gray-700 block mb-1">Which Denomination?</label>
             <select value={denom} onChange={(e) => setDenom(e.target.value)} className="w-full border p-2 rounded bg-gray-50">
               <option value="ALL">All Denominations (Full Report)</option>
-              {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {d.toLocaleString()}</option>)}
+              {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {d.toLocaleString('en-IN')}</option>)}
             </select>
           </div>
           <div>
@@ -102,7 +110,8 @@ const Dashboard = ({ totalFund, openAdd, setView, isToolsOpen, setIsToolsOpen, h
   <div className="flex flex-col items-center w-full max-w-sm">
     <div className="bg-white p-6 rounded-xl shadow-lg w-full text-center border-t-4 border-orange-500">
       <p className="text-gray-500 text-sm uppercase tracking-wide">Total Fund</p>
-      <h2 className="text-4xl font-extrabold text-gray-800 my-2">₹ {totalFund.toLocaleString()}</h2>
+      {/* INDIAN CURRENCY FORMAT */}
+      <h2 className="text-4xl font-extrabold text-gray-800 my-2">₹ {totalFund.toLocaleString('en-IN')}</h2>
       <p className="text-xs text-green-600 font-semibold bg-green-100 inline-block px-2 py-1 rounded">Safe & Verified</p>
     </div>
     <div className="w-full mt-8">
@@ -151,12 +160,16 @@ const HistoryList = ({ setView, searchTerm, setSearchTerm, filterDenom, setFilte
         <div key={item.id} className="flex items-center justify-between p-3 border-b border-gray-100">
           <div className="flex flex-col">
             <span className="font-bold text-gray-800 text-lg">{item.donor_name}</span>
-            <span className="text-xs text-gray-400">Rcpt: <b className="text-gray-600">{item.receipt_no}</b> • Sl: {item.sl_no}</span>
+            <span className="text-xs text-gray-400">
+              Rcpt: <b className="text-gray-600">{item.receipt_no}</b> • Sl: {item.sl_no}
+            </span>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <span className="block font-bold text-green-600 text-lg">₹{item.amount.toLocaleString()}</span>
-              <span className="block text-xs text-gray-400">{item.date}</span>
+              {/* INDIAN CURRENCY FORMAT */}
+              <span className="block font-bold text-green-600 text-lg">₹{item.amount.toLocaleString('en-IN')}</span>
+              {/* INDIAN DATE FORMAT (DD-MM-YYYY) */}
+              <span className="block text-xs text-gray-400">{formatDateIN(item.date)}</span>
             </div>
             <div className="flex gap-2 ml-2">
               <button onClick={() => openEdit(item)} className="p-1 bg-blue-100 text-blue-600 rounded text-xs">✏️</button>
@@ -244,7 +257,6 @@ function App() {
           filterTxt = `Denomination: ${denom}`; 
         }
         if (startDate && endDate) { 
-          // Smart Date Comparison (String to String works because format is YYYY-MM-DD)
           filtered = filtered.filter(d => d.date >= startDate && d.date <= endDate); 
           filterTxt += ` | Date: ${startDate} to ${endDate}`; 
         } else { 
@@ -278,7 +290,6 @@ function App() {
     }, 500);
   };
 
-  // --- NEW DATE PARSER HELPER ---
   const parseExcelDate = (input) => {
     if (!input) return new Date().toISOString().split('T')[0];
     if (typeof input === 'number') {
@@ -286,19 +297,17 @@ function App() {
       return date.toISOString().split('T')[0];
     }
     const str = String(input).trim();
-    // Regex for DD.MM.YY or DD/MM/YYYY
     const parts = str.match(/(\d{1,2})[\.\/\-](\d{1,2})[\.\/\-](\d{2,4})/);
     if (parts) {
       let day = parts[1].padStart(2, '0');
       let month = parts[2].padStart(2, '0');
       let year = parts[3];
       if (year.length === 2) year = "20" + year;
-      return `${year}-${month}-${day}`; // Standardizes to YYYY-MM-DD
+      return `${year}-${month}-${day}`; 
     }
     return new Date().toISOString().split('T')[0];
   };
 
-  // --- UPDATED IMPORT FUNCTION ---
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -319,8 +328,6 @@ function App() {
           const sl = row['Sl No'] || row['Sl.No'] || row['Sl. No'];
           const rcpt = row['Receipt No'] || row['Receipt no'] || 'Pending';
           const name = row['Name & Address'] || row.Name || "To be updated"; 
-          
-          // FIX: Convert Excel date (DD.MM.YY) to App date (YYYY-MM-DD)
           const rawDate = row.Date; 
           const date = parseExcelDate(rawDate);
 
