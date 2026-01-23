@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { initDB, getDB, getAllDonations, deleteDonation } from './db/database';
-import { generatePDF } from './pdfGenerator'; // <--- IMPORT THE NEW ENGINE
+import { generatePDFData } from './pdfGenerator'; 
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 // ==========================================
-// 1. POPUP COMPONENT (Entry/Edit)
+// 1. POPUP COMPONENT 
 // ==========================================
 const TransactionPopup = ({ formMode, formData, setFormData, setFormMode, handleSave, DENOMINATIONS }) => {
   const isAdd = formMode === 'ADD';
@@ -51,7 +53,7 @@ const TransactionPopup = ({ formMode, formData, setFormData, setFormMode, handle
 };
 
 // ==========================================
-// 2. REPORT POPUP (New Feature)
+// 2. REPORT POPUP
 // ==========================================
 const ReportPopup = ({ isOpen, onClose, DENOMINATIONS, onGenerate }) => {
   if (!isOpen) return null;
@@ -68,20 +70,14 @@ const ReportPopup = ({ isOpen, onClose, DENOMINATIONS, onGenerate }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fade-in">
       <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
         <h3 className="text-xl font-bold mb-4 text-orange-600">📄 Generate PDF Report</h3>
-        
         <div className="flex flex-col gap-4">
           <div>
             <label className="text-sm font-bold text-gray-700 block mb-1">Which Denomination?</label>
-            <select 
-              value={denom} 
-              onChange={(e) => setDenom(e.target.value)}
-              className="w-full border p-2 rounded bg-gray-50"
-            >
+            <select value={denom} onChange={(e) => setDenom(e.target.value)} className="w-full border p-2 rounded bg-gray-50">
               <option value="ALL">All Denominations (Full Report)</option>
               {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {d.toLocaleString()}</option>)}
             </select>
           </div>
-
           <div>
             <label className="text-sm font-bold text-gray-700 block mb-1">Date Range (Optional)</label>
             <div className="flex gap-2">
@@ -91,13 +87,7 @@ const ReportPopup = ({ isOpen, onClose, DENOMINATIONS, onGenerate }) => {
             </div>
             <p className="text-xs text-gray-400 mt-1">*Leave dates empty for "All Time"</p>
           </div>
-
-          <button 
-            onClick={handleGen}
-            className="w-full bg-orange-600 text-white font-bold py-3 rounded-lg shadow mt-2 hover:bg-orange-700"
-          >
-            Download PDF
-          </button>
+          <button onClick={handleGen} className="w-full bg-orange-600 text-white font-bold py-3 rounded-lg shadow mt-2 hover:bg-orange-700">Download PDF</button>
           <button onClick={onClose} className="w-full text-gray-500 text-sm mt-2">Cancel</button>
         </div>
       </div>
@@ -120,17 +110,11 @@ const Dashboard = ({ totalFund, openAdd, setView, isToolsOpen, setIsToolsOpen, h
         <span className="text-3xl">+</span><span>Add Receipt</span>
       </button>
     </div>
-    
     <button onClick={() => setView('history')} className="mt-6 bg-white text-orange-600 border border-orange-100 py-3 px-8 rounded-full shadow-sm font-semibold w-full">📜 View Receipt Book</button>
-    
     <button onClick={() => setIsToolsOpen(!isToolsOpen)} className="mt-8 text-gray-400">🛠️ Tools & Reports</button>
     {isToolsOpen && (
       <div className="mt-4 w-full space-y-3">
-        {/* NEW REPORT BUTTON */}
-        <button onClick={openReport} className="w-full bg-blue-600 text-white py-3 rounded-lg shadow font-bold flex items-center justify-center gap-2">
-           📄 Generate PDF Report
-        </button>
-        
+        <button onClick={openReport} className="w-full bg-blue-600 text-white py-3 rounded-lg shadow font-bold flex items-center justify-center gap-2">📄 Generate PDF Report</button>
         <div className="bg-white p-4 rounded-lg shadow w-full">
           <label className="block w-full bg-blue-50 text-blue-700 py-3 rounded text-center font-bold cursor-pointer text-sm">
             📂 Import Excel
@@ -199,8 +183,8 @@ function App() {
   const [formMode, setFormMode] = useState(null);
   const [formData, setFormData] = useState({ id: null, donor_name: '', denomination: '100', amount: '100', sl_no: '', receipt_no: '', date: '' });
   
-  // REPORT STATE
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false); 
 
   const DENOMINATIONS = [100, 200, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
 
@@ -248,28 +232,45 @@ function App() {
     }
   };
 
-  // --- REPORT GENERATION LOGIC ---
-  const handleGeneratePDF = (denom, startDate, endDate) => {
-    // 1. Filter Data
-    let filtered = donations;
-    let filterTxt = "All Denominations";
+  const handleGeneratePDF = async (denom, startDate, endDate) => {
+    setIsGenerating(true); // START LOADING SCREEN
+    
+    // Slight delay to allow the "Generating" screen to appear
+    setTimeout(async () => {
+      try {
+        // 1. Filter Data
+        let filtered = donations;
+        let filterTxt = "All Denominations";
+        if (denom !== "ALL") { filtered = filtered.filter(d => d.denomination == denom); filterTxt = `Denomination: ${denom}`; }
+        if (startDate && endDate) { filtered = filtered.filter(d => d.date >= startDate && d.date <= endDate); filterTxt += ` | Date: ${startDate} to ${endDate}`; } else { filterTxt += ` | Date: All Time`; }
 
-    // Denom Filter
-    if (denom !== "ALL") {
-      filtered = filtered.filter(d => d.denomination == denom);
-      filterTxt = `Denomination: ${denom}`;
-    }
+        // 2. Generate Base64 Data
+        const pdfDataUri = generatePDFData(filtered, filterTxt);
+        const base64Data = pdfDataUri.split(',')[1];
+        const fileName = `Temple_Report_${Date.now()}.pdf`;
 
-    // Date Filter
-    if (startDate && endDate) {
-      filtered = filtered.filter(d => d.date >= startDate && d.date <= endDate);
-      filterTxt += ` | Date: ${startDate} to ${endDate}`;
-    } else {
-      filterTxt += ` | Date: All Time`;
-    }
+        // 3. Write File to Phone Cache
+        const savedFile = await Filesystem.writeFile({
+          path: fileName,
+          data: base64Data,
+          directory: Directory.Cache
+        });
 
-    // 2. Call the Engine
-    generatePDF(filtered, filterTxt);
+        // 4. Share File (Open "Share" Menu)
+        await Share.share({
+          title: 'Temple Receipt Report',
+          text: `Report generated on ${new Date().toLocaleDateString()}`,
+          url: savedFile.uri,
+          dialogTitle: 'Download Report'
+        });
+
+      } catch (error) {
+        console.error("PDF Error:", error);
+        alert("Error creating PDF: " + error.message);
+      } finally {
+        setIsGenerating(false); // STOP LOADING SCREEN
+      }
+    }, 100);
   };
 
   const handleFileUpload = (e) => {
@@ -326,33 +327,22 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center p-4 font-sans">
       <h1 className="text-2xl font-bold text-orange-600 mt-2 mb-4">Temple Ledger</h1>
-      
       {view === 'dashboard' ? (
-        <Dashboard 
-          totalFund={totalFund} openAdd={openAdd} setView={setView} 
-          isToolsOpen={isToolsOpen} setIsToolsOpen={setIsToolsOpen} 
-          handleFileUpload={handleFileUpload} statusMsg={statusMsg}
-          openReport={() => setIsReportOpen(true)} // OPEN REPORT POPUP
-        />
+        <Dashboard totalFund={totalFund} openAdd={openAdd} setView={setView} isToolsOpen={isToolsOpen} setIsToolsOpen={setIsToolsOpen} handleFileUpload={handleFileUpload} statusMsg={statusMsg} openReport={() => setIsReportOpen(true)}/>
       ) : (
-        <HistoryList 
-          setView={setView} searchTerm={searchTerm} setSearchTerm={setSearchTerm} 
-          filterDenom={filterDenom} setFilterDenom={setFilterDenom} 
-          DENOMINATIONS={DENOMINATIONS} filteredDonations={filteredDonations} 
-          openEdit={openEdit} handleDelete={handleDelete} 
-        />
+        <HistoryList setView={setView} searchTerm={searchTerm} setSearchTerm={setSearchTerm} filterDenom={filterDenom} setFilterDenom={setFilterDenom} DENOMINATIONS={DENOMINATIONS} filteredDonations={filteredDonations} openEdit={openEdit} handleDelete={handleDelete}/>
       )}
+      {formMode && ( <TransactionPopup formMode={formMode} formData={formData} setFormData={setFormData} setFormMode={setFormMode} handleSave={handleSave} DENOMINATIONS={DENOMINATIONS}/> )}
+      <ReportPopup isOpen={isReportOpen} onClose={() => setIsReportOpen(false)} DENOMINATIONS={DENOMINATIONS} onGenerate={handleGeneratePDF}/>
       
-      {formMode && (
-        <TransactionPopup formMode={formMode} formData={formData} setFormData={setFormData} setFormMode={setFormMode} handleSave={handleSave} DENOMINATIONS={DENOMINATIONS}/>
+      {/* LOADING SCREEN */}
+      {isGenerating && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center z-[60]">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-orange-500 mb-4"></div>
+          <h2 className="text-white text-xl font-bold">Generating PDF...</h2>
+          <p className="text-gray-300">Please wait...</p>
+        </div>
       )}
-
-      <ReportPopup 
-        isOpen={isReportOpen} 
-        onClose={() => setIsReportOpen(false)} 
-        DENOMINATIONS={DENOMINATIONS} 
-        onGenerate={handleGeneratePDF}
-      />
     </div>
   );
 }

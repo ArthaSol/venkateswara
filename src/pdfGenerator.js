@@ -1,12 +1,12 @@
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
-export const generatePDF = (donations, filterDetails) => {
+export const generatePDFData = (donations, filterDetails) => {
   const doc = new jsPDF();
 
   // 1. HEADER
   doc.setFontSize(18);
-  doc.setTextColor(220, 80, 0); // Orange color
+  doc.setTextColor(220, 80, 0); 
   doc.text("SRI VENKATESWARA TEMPLE", 105, 15, { align: "center" });
   
   doc.setFontSize(12);
@@ -53,5 +53,6 @@ export const generatePDF = (donations, filterDetails) => {
     footStyles: { fillColor: [240, 240, 240], textColor: 0, fontStyle: 'bold', halign: 'right' }
   });
 
-  doc.save(`Temple_Report_${dateStr}.pdf`);
+  // RETURN DATA FOR SHARE
+  return doc.output('datauristring');
 };
