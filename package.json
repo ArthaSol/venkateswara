@@ -15,6 +15,8 @@
     "@capacitor/cli": "^8.0.1",
     "@capacitor/core": "^8.0.1",
     "clsx": "^2.1.1",
+    "jspdf": "^4.0.0",
+    "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.562.0",
     "pdfmake": "^0.3.3",
     "react": "^19.2.0",

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { initDB, getDB, getAllDonations, deleteDonation } from './db/database';
+import { generatePDF } from './pdfGenerator'; // <--- IMPORT THE NEW ENGINE
 
 // ==========================================
-// 1. POPUP COMPONENT (Outside App)
+// 1. POPUP COMPONENT (Entry/Edit)
 // ==========================================
 const TransactionPopup = ({ formMode, formData, setFormData, setFormMode, handleSave, DENOMINATIONS }) => {
   const isAdd = formMode === 'ADD';
@@ -23,7 +24,6 @@ const TransactionPopup = ({ formMode, formData, setFormData, setFormMode, handle
           >
             {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {d.toLocaleString()}</option>)}
           </select>
-
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="text-xs font-bold text-gray-500">Sl No</label>
@@ -34,16 +34,12 @@ const TransactionPopup = ({ formMode, formData, setFormData, setFormMode, handle
               <input type="text" value={formData.receipt_no} onChange={(e) => setFormData({...formData, receipt_no: e.target.value})} className="border p-2 rounded w-full"/>
             </div>
           </div>
-
           <label className="text-sm font-bold text-gray-700">Actual Amount (₹)</label>
           <input type="number" value={formData.amount} onChange={(e) => setFormData({...formData, amount: e.target.value})} className="border p-2 rounded text-lg font-bold"/>
-
           <label className="text-sm font-bold text-gray-700">Name & Address</label>
           <textarea rows="2" value={formData.donor_name} onChange={(e) => setFormData({...formData, donor_name: e.target.value})} className="border p-2 rounded text-lg"></textarea>
-
           <label className="text-sm font-bold text-gray-700">Date</label>
           <input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className="border p-2 rounded"/>
-
           <div className="flex gap-2 mt-4">
             <button type="button" onClick={() => setFormMode(null)} className="flex-1 bg-gray-200 py-3 rounded font-bold">Cancel</button>
             <button type="submit" className="flex-1 bg-orange-600 text-white py-3 rounded font-bold">Save</button>
@@ -55,9 +51,64 @@ const TransactionPopup = ({ formMode, formData, setFormData, setFormMode, handle
 };
 
 // ==========================================
-// 2. DASHBOARD COMPONENT (Outside App)
+// 2. REPORT POPUP (New Feature)
 // ==========================================
-const Dashboard = ({ totalFund, openAdd, setView, isToolsOpen, setIsToolsOpen, handleFileUpload, statusMsg }) => (
+const ReportPopup = ({ isOpen, onClose, DENOMINATIONS, onGenerate }) => {
+  if (!isOpen) return null;
+  const [denom, setDenom] = useState("ALL");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const handleGen = () => {
+    onGenerate(denom, startDate, endDate);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fade-in">
+      <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm">
+        <h3 className="text-xl font-bold mb-4 text-orange-600">📄 Generate PDF Report</h3>
+        
+        <div className="flex flex-col gap-4">
+          <div>
+            <label className="text-sm font-bold text-gray-700 block mb-1">Which Denomination?</label>
+            <select 
+              value={denom} 
+              onChange={(e) => setDenom(e.target.value)}
+              className="w-full border p-2 rounded bg-gray-50"
+            >
+              <option value="ALL">All Denominations (Full Report)</option>
+              {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {d.toLocaleString()}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-sm font-bold text-gray-700 block mb-1">Date Range (Optional)</label>
+            <div className="flex gap-2">
+              <input type="date" className="border p-2 rounded w-full text-xs" value={startDate} onChange={e => setStartDate(e.target.value)} />
+              <span className="self-center">-</span>
+              <input type="date" className="border p-2 rounded w-full text-xs" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            </div>
+            <p className="text-xs text-gray-400 mt-1">*Leave dates empty for "All Time"</p>
+          </div>
+
+          <button 
+            onClick={handleGen}
+            className="w-full bg-orange-600 text-white font-bold py-3 rounded-lg shadow mt-2 hover:bg-orange-700"
+          >
+            Download PDF
+          </button>
+          <button onClick={onClose} className="w-full text-gray-500 text-sm mt-2">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// 3. DASHBOARD COMPONENT
+// ==========================================
+const Dashboard = ({ totalFund, openAdd, setView, isToolsOpen, setIsToolsOpen, handleFileUpload, statusMsg, openReport }) => (
   <div className="flex flex-col items-center w-full max-w-sm">
     <div className="bg-white p-6 rounded-xl shadow-lg w-full text-center border-t-4 border-orange-500">
       <p className="text-gray-500 text-sm uppercase tracking-wide">Total Fund</p>
@@ -69,22 +120,31 @@ const Dashboard = ({ totalFund, openAdd, setView, isToolsOpen, setIsToolsOpen, h
         <span className="text-3xl">+</span><span>Add Receipt</span>
       </button>
     </div>
+    
     <button onClick={() => setView('history')} className="mt-6 bg-white text-orange-600 border border-orange-100 py-3 px-8 rounded-full shadow-sm font-semibold w-full">📜 View Receipt Book</button>
-    <button onClick={() => setIsToolsOpen(!isToolsOpen)} className="mt-8 text-gray-400">🛠️ Tools</button>
+    
+    <button onClick={() => setIsToolsOpen(!isToolsOpen)} className="mt-8 text-gray-400">🛠️ Tools & Reports</button>
     {isToolsOpen && (
-      <div className="mt-4 bg-white p-4 rounded-lg shadow w-full">
-        <label className="block w-full bg-blue-100 text-blue-700 py-3 rounded text-center font-bold cursor-pointer">
-          📂 Import Receipt Excel
-          <input type="file" accept=".xlsx" onChange={handleFileUpload} className="hidden" />
-        </label>
-        <p className="text-xs text-green-600 mt-2 text-center">{statusMsg}</p>
+      <div className="mt-4 w-full space-y-3">
+        {/* NEW REPORT BUTTON */}
+        <button onClick={openReport} className="w-full bg-blue-600 text-white py-3 rounded-lg shadow font-bold flex items-center justify-center gap-2">
+           📄 Generate PDF Report
+        </button>
+        
+        <div className="bg-white p-4 rounded-lg shadow w-full">
+          <label className="block w-full bg-blue-50 text-blue-700 py-3 rounded text-center font-bold cursor-pointer text-sm">
+            📂 Import Excel
+            <input type="file" accept=".xlsx" onChange={handleFileUpload} className="hidden" />
+          </label>
+          <p className="text-xs text-green-600 mt-2 text-center">{statusMsg}</p>
+        </div>
       </div>
     )}
   </div>
 );
 
 // ==========================================
-// 3. HISTORY LIST COMPONENT (Outside App)
+// 4. HISTORY LIST COMPONENT
 // ==========================================
 const HistoryList = ({ setView, searchTerm, setSearchTerm, filterDenom, setFilterDenom, DENOMINATIONS, filteredDonations, openEdit, handleDelete }) => (
   <div className="w-full max-w-sm flex flex-col h-screen pb-4">
@@ -95,13 +155,7 @@ const HistoryList = ({ setView, searchTerm, setSearchTerm, filterDenom, setFilte
     </div>
     <div className="bg-white p-3 rounded-lg shadow-sm mb-4 space-y-2">
       <div className="flex gap-2">
-        <input 
-          type="text" 
-          placeholder="Search..." 
-          value={searchTerm} 
-          onChange={(e) => setSearchTerm(e.target.value)} 
-          className="flex-1 border p-2 rounded text-sm"
-        />
+        <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-1 border p-2 rounded text-sm"/>
         <select value={filterDenom} onChange={(e) => setFilterDenom(e.target.value)} className="border p-2 rounded text-sm w-24 font-bold text-gray-600">
           <option value="">All</option>
           {DENOMINATIONS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -132,7 +186,7 @@ const HistoryList = ({ setView, searchTerm, setSearchTerm, filterDenom, setFilte
 );
 
 // ==========================================
-// 4. MAIN APP COMPONENT
+// 5. MAIN APP COMPONENT
 // ==========================================
 function App() {
   const [view, setView] = useState('dashboard');
@@ -144,6 +198,10 @@ function App() {
   const [filterDenom, setFilterDenom] = useState("");
   const [formMode, setFormMode] = useState(null);
   const [formData, setFormData] = useState({ id: null, donor_name: '', denomination: '100', amount: '100', sl_no: '', receipt_no: '', date: '' });
+  
+  // REPORT STATE
+  const [isReportOpen, setIsReportOpen] = useState(false);
+
   const DENOMINATIONS = [100, 200, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
 
   useEffect(() => {
@@ -190,7 +248,30 @@ function App() {
     }
   };
 
-  // --- SMART IMPORT LOGIC ---
+  // --- REPORT GENERATION LOGIC ---
+  const handleGeneratePDF = (denom, startDate, endDate) => {
+    // 1. Filter Data
+    let filtered = donations;
+    let filterTxt = "All Denominations";
+
+    // Denom Filter
+    if (denom !== "ALL") {
+      filtered = filtered.filter(d => d.denomination == denom);
+      filterTxt = `Denomination: ${denom}`;
+    }
+
+    // Date Filter
+    if (startDate && endDate) {
+      filtered = filtered.filter(d => d.date >= startDate && d.date <= endDate);
+      filterTxt += ` | Date: ${startDate} to ${endDate}`;
+    } else {
+      filterTxt += ` | Date: All Time`;
+    }
+
+    // 2. Call the Engine
+    generatePDF(filtered, filterTxt);
+  };
+
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -201,44 +282,29 @@ function App() {
       const wb = XLSX.read(bstr, { type: 'binary' });
       const db = await getDB();
       let count = 0;
-
       for (const sheetName of wb.SheetNames) {
         const cleanSheetName = sheetName.replace(/,/g, '').trim();
         const sheetDenom = parseInt(cleanSheetName);
         if (isNaN(sheetDenom)) continue;
-
         const ws = wb.Sheets[sheetName];
         const data = XLSX.utils.sheet_to_json(ws);
-        
         for (const row of data) {
           const sl = row['Sl No'] || row['Sl.No'] || row['Sl. No'];
           const rcpt = row['Receipt No'] || row['Receipt no'] || 'Pending';
-          // Logic: If Name is missing, mark as "To be updated"
           const name = row['Name & Address'] || row.Name || "To be updated"; 
           const date = row.Date || new Date().toISOString().split('T')[0];
-
           let finalAmount = 0;
           let hasAmountInExcel = false;
           if (row.Amount !== undefined) {
              const cleanAmt = String(row.Amount).replace(/,/g, '');
              const parsed = parseFloat(cleanAmt);
-             if (parsed > 0) {
-               finalAmount = parsed;
-               hasAmountInExcel = true;
-             }
+             if (parsed > 0) { finalAmount = parsed; hasAmountInExcel = true; }
           }
-          if (!hasAmountInExcel && sl) {
-            finalAmount = sheetDenom;
-          }
-          
-          // STRICT GATEKEEPER: Ignore if NO Sl No AND NO Amount
+          if (!hasAmountInExcel && sl) { finalAmount = sheetDenom; }
           if (!sl && !hasAmountInExcel) continue;
-
           if (finalAmount > 0) {
-            await db.run(
-              `INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
-              [date, name, finalAmount, 'CREDIT', sheetDenom, sl || 'Pending', rcpt]
-            );
+            await db.run(`INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
+              [date, name, finalAmount, 'CREDIT', sheetDenom, sl || 'Pending', rcpt]);
             count++;
           }
         }
@@ -263,38 +329,30 @@ function App() {
       
       {view === 'dashboard' ? (
         <Dashboard 
-          totalFund={totalFund} 
-          openAdd={openAdd} 
-          setView={setView} 
-          isToolsOpen={isToolsOpen} 
-          setIsToolsOpen={setIsToolsOpen} 
-          handleFileUpload={handleFileUpload} 
-          statusMsg={statusMsg} 
+          totalFund={totalFund} openAdd={openAdd} setView={setView} 
+          isToolsOpen={isToolsOpen} setIsToolsOpen={setIsToolsOpen} 
+          handleFileUpload={handleFileUpload} statusMsg={statusMsg}
+          openReport={() => setIsReportOpen(true)} // OPEN REPORT POPUP
         />
       ) : (
         <HistoryList 
-          setView={setView} 
-          searchTerm={searchTerm} 
-          setSearchTerm={setSearchTerm} 
-          filterDenom={filterDenom} 
-          setFilterDenom={setFilterDenom} 
-          DENOMINATIONS={DENOMINATIONS} 
-          filteredDonations={filteredDonations} 
-          openEdit={openEdit} 
-          handleDelete={handleDelete} 
+          setView={setView} searchTerm={searchTerm} setSearchTerm={setSearchTerm} 
+          filterDenom={filterDenom} setFilterDenom={setFilterDenom} 
+          DENOMINATIONS={DENOMINATIONS} filteredDonations={filteredDonations} 
+          openEdit={openEdit} handleDelete={handleDelete} 
         />
       )}
       
       {formMode && (
-        <TransactionPopup 
-          formMode={formMode} 
-          formData={formData} 
-          setFormData={setFormData} 
-          setFormMode={setFormMode} 
-          handleSave={handleSave} 
-          DENOMINATIONS={DENOMINATIONS}
-        />
+        <TransactionPopup formMode={formMode} formData={formData} setFormData={setFormData} setFormMode={setFormMode} handleSave={handleSave} DENOMINATIONS={DENOMINATIONS}/>
       )}
+
+      <ReportPopup 
+        isOpen={isReportOpen} 
+        onClose={() => setIsReportOpen(false)} 
+        DENOMINATIONS={DENOMINATIONS} 
+        onGenerate={handleGeneratePDF}
+      />
     </div>
   );
 }
