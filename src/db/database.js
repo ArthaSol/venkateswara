@@ -8,7 +8,7 @@ export const initDB = async () => {
     const db = await sqlite.createConnection('temple_db', false, 'no-encryption', 1, false);
     await db.open();
     
-    // Create the Table if it doesn't exist
+    // --- NEW SCHEMA FOR RECEIPT BOOKS ---
     const schema = `
       CREATE TABLE IF NOT EXISTS donations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -16,7 +16,9 @@ export const initDB = async () => {
         donor_name TEXT,
         amount REAL,
         type TEXT DEFAULT 'CREDIT',
-        remarks TEXT
+        denomination INTEGER, 
+        sl_no TEXT,
+        receipt_no TEXT
       );
     `;
     await db.execute(schema);
@@ -31,13 +33,9 @@ export const getDB = async () => {
   return sqlite.retrieveConnection('temple_db', false);
 };
 
-// ... (keep existing initDB and getDB code) ...
-
 export const getAllDonations = async () => {
   const db = await getDB();
-  // Get all entries, ordered by newest first
-  const res = await db.query("SELECT * FROM donations ORDER BY id DESC");
-  return res.values || [];
+  return (await db.query("SELECT * FROM donations ORDER BY id DESC")).values || [];
 };
 
 export const deleteDonation = async (id) => {
