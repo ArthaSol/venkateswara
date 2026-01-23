@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable"; // <--- CHANGED THIS IMPORT
 
 export const generatePDFData = (donations, filterDetails) => {
   const doc = new jsPDF();
@@ -34,8 +34,8 @@ export const generatePDFData = (donations, filterDetails) => {
   // 4. TOTAL
   const totalAmount = donations.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
 
-  // 5. DRAW TABLE
-  doc.autoTable({
+  // 5. DRAW TABLE - FIXED METHOD
+  autoTable(doc, {   // <--- CHANGED FROM doc.autoTable TO autoTable(doc, ...)
     startY: 40,
     head: [['Date', 'Sl No', 'Rcpt No', 'Name & Address', 'Amount (Rs)']],
     body: tableRows,
@@ -53,6 +53,6 @@ export const generatePDFData = (donations, filterDetails) => {
     footStyles: { fillColor: [240, 240, 240], textColor: 0, fontStyle: 'bold', halign: 'right' }
   });
 
-  // RETURN DATA FOR SHARE
+  // RETURN DATA
   return doc.output('datauristring');
 };
