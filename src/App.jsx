@@ -233,30 +233,35 @@ function App() {
   };
 
   const handleGeneratePDF = async (denom, startDate, endDate) => {
-    setIsGenerating(true); // START LOADING SCREEN
+    setIsGenerating(true); 
     
-    // Slight delay to allow the "Generating" screen to appear
     setTimeout(async () => {
       try {
-        // 1. Filter Data
         let filtered = donations;
         let filterTxt = "All Denominations";
-        if (denom !== "ALL") { filtered = filtered.filter(d => d.denomination == denom); filterTxt = `Denomination: ${denom}`; }
-        if (startDate && endDate) { filtered = filtered.filter(d => d.date >= startDate && d.date <= endDate); filterTxt += ` | Date: ${startDate} to ${endDate}`; } else { filterTxt += ` | Date: All Time`; }
+        if (denom !== "ALL") { 
+          filtered = filtered.filter(d => d.denomination == denom); 
+          filterTxt = `Denomination: ${denom}`; 
+        }
+        if (startDate && endDate) { 
+          // Smart Date Comparison (String to String works because format is YYYY-MM-DD)
+          filtered = filtered.filter(d => d.date >= startDate && d.date <= endDate); 
+          filterTxt += ` | Date: ${startDate} to ${endDate}`; 
+        } else { 
+          filterTxt += ` | Date: All Time`; 
+        }
 
-        // 2. Generate Base64 Data
         const pdfDataUri = generatePDFData(filtered, filterTxt);
         const base64Data = pdfDataUri.split(',')[1];
         const fileName = `Temple_Report_${Date.now()}.pdf`;
 
-        // 3. Write File to Phone Cache
         const savedFile = await Filesystem.writeFile({
           path: fileName,
           data: base64Data,
-          directory: Directory.Cache
+          directory: Directory.Documents,
+          recursive: true
         });
 
-        // 4. Share File (Open "Share" Menu)
         await Share.share({
           title: 'Temple Receipt Report',
           text: `Report generated on ${new Date().toLocaleDateString()}`,
@@ -266,13 +271,34 @@ function App() {
 
       } catch (error) {
         console.error("PDF Error:", error);
-        alert("Error creating PDF: " + error.message);
+        alert("PDF Error: " + (error.message || JSON.stringify(error)));
       } finally {
-        setIsGenerating(false); // STOP LOADING SCREEN
+        setIsGenerating(false);
       }
-    }, 100);
+    }, 500);
   };
 
+  // --- NEW DATE PARSER HELPER ---
+  const parseExcelDate = (input) => {
+    if (!input) return new Date().toISOString().split('T')[0];
+    if (typeof input === 'number') {
+      const date = new Date(Math.round((input - 25569) * 86400 * 1000));
+      return date.toISOString().split('T')[0];
+    }
+    const str = String(input).trim();
+    // Regex for DD.MM.YY or DD/MM/YYYY
+    const parts = str.match(/(\d{1,2})[\.\/\-](\d{1,2})[\.\/\-](\d{2,4})/);
+    if (parts) {
+      let day = parts[1].padStart(2, '0');
+      let month = parts[2].padStart(2, '0');
+      let year = parts[3];
+      if (year.length === 2) year = "20" + year;
+      return `${year}-${month}-${day}`; // Standardizes to YYYY-MM-DD
+    }
+    return new Date().toISOString().split('T')[0];
+  };
+
+  // --- UPDATED IMPORT FUNCTION ---
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -293,7 +319,11 @@ function App() {
           const sl = row['Sl No'] || row['Sl.No'] || row['Sl. No'];
           const rcpt = row['Receipt No'] || row['Receipt no'] || 'Pending';
           const name = row['Name & Address'] || row.Name || "To be updated"; 
-          const date = row.Date || new Date().toISOString().split('T')[0];
+          
+          // FIX: Convert Excel date (DD.MM.YY) to App date (YYYY-MM-DD)
+          const rawDate = row.Date; 
+          const date = parseExcelDate(rawDate);
+
           let finalAmount = 0;
           let hasAmountInExcel = false;
           if (row.Amount !== undefined) {
@@ -335,7 +365,6 @@ function App() {
       {formMode && ( <TransactionPopup formMode={formMode} formData={formData} setFormData={setFormData} setFormMode={setFormMode} handleSave={handleSave} DENOMINATIONS={DENOMINATIONS}/> )}
       <ReportPopup isOpen={isReportOpen} onClose={() => setIsReportOpen(false)} DENOMINATIONS={DENOMINATIONS} onGenerate={handleGeneratePDF}/>
       
-      {/* LOADING SCREEN */}
       {isGenerating && (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex flex-col items-center justify-center z-[60]">
           <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-orange-500 mb-4"></div>
