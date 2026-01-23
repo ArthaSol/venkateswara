@@ -2,175 +2,28 @@ import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { initDB, getDB, getAllDonations, deleteDonation } from './db/database';
 
-function App() {
-  const [view, setView] = useState('dashboard');
-  const [totalFund, setTotalFund] = useState(0);
-  const [donations, setDonations] = useState([]);
-  const [isToolsOpen, setIsToolsOpen] = useState(false);
-  const [statusMsg, setStatusMsg] = useState("");
-
-  // FILTERS
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterDenom, setFilterDenom] = useState("");
-
-  // FORM STATE
-  const [formMode, setFormMode] = useState(null); // 'ADD' or 'EDIT'
-  const [formData, setFormData] = useState({ 
-    id: null, 
-    donor_name: '', 
-    denomination: '100', // Default to 100
-    sl_no: '', 
-    receipt_no: '', 
-    date: '' 
-  });
-
-  const DENOMINATIONS = [100, 200, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
-
-  useEffect(() => {
-    const setup = async () => {
-      try {
-        await initDB();
-        refreshData();
-      } catch (e) { console.error("DB Error:", e); }
-    };
-    setup();
-  }, []);
-
-  const refreshData = async () => {
-    const db = await getDB();
-    const res = await db.query("SELECT SUM(amount) as t FROM donations WHERE type='CREDIT'");
-    setTotalFund(res.values[0].t || 0);
-    const all = await getAllDonations();
-    setDonations(all);
-  };
-
-  // --- OPEN FORMS ---
-  const openAdd = () => {
-    setFormData({ 
-      id: null, 
-      donor_name: '', 
-      denomination: '100', 
-      sl_no: '', 
-      receipt_no: '', 
-      date: new Date().toISOString().split('T')[0] 
-    });
-    setFormMode('ADD');
-  };
-
-  const openEdit = (item) => {
-    setFormData({ 
-      id: item.id, 
-      donor_name: item.donor_name, 
-      denomination: item.denomination, 
-      sl_no: item.sl_no, 
-      receipt_no: item.receipt_no, 
-      date: item.date 
-    });
-    setFormMode('EDIT'); 
-  };
-
-  // --- SAVE LOGIC ---
-  const handleSave = async (e) => {
-    e.preventDefault();
-    const db = await getDB();
-    const { id, donor_name, denomination, sl_no, receipt_no, date } = formData;
-    
-    // Amount is AUTOMATIC based on denomination
-    const amount = parseInt(denomination); 
-
-    if (formMode === 'EDIT') {
-      await db.run(
-        "UPDATE donations SET donor_name=?, amount=?, denomination=?, sl_no=?, receipt_no=?, date=? WHERE id=?", 
-        [donor_name, amount, denomination, sl_no, receipt_no, date, id]
-      );
-    } else {
-      await db.run(
-        "INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)", 
-        [date, donor_name, amount, 'CREDIT', denomination, sl_no, receipt_no]
-      );
-    }
-
-    setFormMode(null);
-    refreshData();
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm("Delete this receipt permanently?")) {
-      await deleteDonation(id);
-      refreshData();
-    }
-  };
-
-  // --- IMPORT LOGIC (The Receipt Book Reader) ---
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      setStatusMsg("Reading Receipt Books...");
-      const bstr = evt.target.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
-      const db = await getDB();
-      let count = 0;
-
-      for (const sheetName of wb.SheetNames) {
-        // 1. DETERMINE DENOMINATION FROM SHEET NAME
-        // Remove commas (e.g., "1,00,000" -> "100000")
-        const cleanSheetName = sheetName.replace(/,/g, '').trim();
-        const sheetDenom = parseInt(cleanSheetName);
-
-        // Skip sheets that aren't numbers (like "Summary" or "Report")
-        if (isNaN(sheetDenom)) continue;
-
-        const ws = wb.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(ws);
-        
-        for (const row of data) {
-          // 2. MAP COLUMNS STRICTLY
-          const sl = row['Sl No'] || row['Sl.No'] || row['Sl. No'] || '';
-          const rcpt = row['Receipt No'] || row['Receipt no'] || '';
-          const name = row['Name & Address'] || row.Name || "Unknown";
-          
-          // 3. DATE HANDLING (Default to Today if missing)
-          const date = row.Date || new Date().toISOString().split('T')[0];
-
-          if (sheetDenom > 0) {
-            await db.run(
-              `INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
-              [date, name, sheetDenom, 'CREDIT', sheetDenom, sl, rcpt]
-            );
-            count++;
-          }
-        }
-      }
-      setStatusMsg(`Success! Imported ${count} receipts.`);
-      refreshData();
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  // --- FILTERS ---
-  const filteredDonations = donations.filter(item => {
-    const matchesSearch = item.donor_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          (item.receipt_no && item.receipt_no.toString().includes(searchTerm));
-    const matchesDenom = filterDenom ? item.denomination == filterDenom : true;
-    return matchesSearch && matchesDenom;
-  });
-
-  // --- UI COMPONENTS ---
-  const TransactionPopup = () => (
+// --- FIXED: POPUP COMPONENT MOVED OUTSIDE ---
+// This prevents the keyboard from disappearing while typing
+const TransactionPopup = ({ formMode, formData, setFormData, setFormMode, handleSave, DENOMINATIONS }) => {
+  const isAdd = formMode === 'ADD';
+  
+  return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fade-in overflow-y-auto">
       <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm my-8">
         <h3 className="text-xl font-bold mb-4 text-orange-600">
-          {formMode === 'ADD' ? 'New Receipt Entry' : 'Edit Receipt'}
+          {isAdd ? 'New Receipt Entry' : 'Edit Receipt'}
         </h3>
         
         <form onSubmit={handleSave} className="flex flex-col gap-3">
           
-          <label className="text-sm font-bold text-gray-700">Select Denomination</label>
+          <label className="text-sm font-bold text-gray-700">Select Category (Denomination)</label>
           <select 
             value={formData.denomination}
-            onChange={(e) => setFormData({...formData, denomination: e.target.value})}
+            onChange={(e) => {
+              // Auto-update amount when denomination changes (only if adding new)
+              const val = e.target.value;
+              setFormData(prev => ({...prev, denomination: val, amount: val}));
+            }}
             className="border-2 border-orange-200 p-3 rounded text-xl font-bold text-orange-700 bg-orange-50"
           >
             {DENOMINATIONS.map(d => (
@@ -199,6 +52,15 @@ function App() {
             </div>
           </div>
 
+          {/* FIXED: Amount is now editable but defaults to denomination */}
+          <label className="text-sm font-bold text-gray-700">Actual Amount (₹)</label>
+          <input 
+            type="number" 
+            value={formData.amount} 
+            onChange={(e) => setFormData({...formData, amount: e.target.value})}
+            className="border p-2 rounded text-lg font-bold"
+          />
+
           <label className="text-sm font-bold text-gray-700">Name & Address</label>
           <textarea 
             rows="2"
@@ -217,13 +79,172 @@ function App() {
 
           <div className="flex gap-2 mt-4">
             <button type="button" onClick={() => setFormMode(null)} className="flex-1 bg-gray-200 py-3 rounded font-bold">Cancel</button>
-            <button type="submit" className="flex-1 bg-orange-600 text-white py-3 rounded font-bold">Save Receipt</button>
+            <button type="submit" className="flex-1 bg-orange-600 text-white py-3 rounded font-bold">Save</button>
           </div>
         </form>
       </div>
     </div>
   );
+};
 
+function App() {
+  const [view, setView] = useState('dashboard');
+  const [totalFund, setTotalFund] = useState(0);
+  const [donations, setDonations] = useState([]);
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const [statusMsg, setStatusMsg] = useState("");
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterDenom, setFilterDenom] = useState("");
+
+  const [formMode, setFormMode] = useState(null);
+  const [formData, setFormData] = useState({ 
+    id: null, 
+    donor_name: '', 
+    denomination: '100', 
+    amount: '100',
+    sl_no: '', 
+    receipt_no: '', 
+    date: '' 
+  });
+
+  const DENOMINATIONS = [100, 200, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
+
+  useEffect(() => {
+    const setup = async () => {
+      try {
+        await initDB();
+        refreshData();
+      } catch (e) { console.error("DB Error:", e); }
+    };
+    setup();
+  }, []);
+
+  const refreshData = async () => {
+    const db = await getDB();
+    const res = await db.query("SELECT SUM(amount) as t FROM donations WHERE type='CREDIT'");
+    setTotalFund(res.values[0].t || 0);
+    const all = await getAllDonations();
+    setDonations(all);
+  };
+
+  const openAdd = () => {
+    setFormData({ 
+      id: null, 
+      donor_name: '', 
+      denomination: '100', 
+      amount: '100',
+      sl_no: '', 
+      receipt_no: '', 
+      date: new Date().toISOString().split('T')[0] 
+    });
+    setFormMode('ADD');
+  };
+
+  const openEdit = (item) => {
+    setFormData({ 
+      id: item.id, 
+      donor_name: item.donor_name, 
+      denomination: item.denomination,
+      amount: item.amount,
+      sl_no: item.sl_no, 
+      receipt_no: item.receipt_no, 
+      date: item.date 
+    });
+    setFormMode('EDIT'); 
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    const db = await getDB();
+    const { id, donor_name, denomination, sl_no, receipt_no, date, amount } = formData;
+    
+    // Use the Typed Amount, not just denomination
+    const finalAmount = parseFloat(amount) || 0;
+
+    if (formMode === 'EDIT') {
+      await db.run(
+        "UPDATE donations SET donor_name=?, amount=?, denomination=?, sl_no=?, receipt_no=?, date=? WHERE id=?", 
+        [donor_name, finalAmount, denomination, sl_no, receipt_no, date, id]
+      );
+    } else {
+      await db.run(
+        "INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+        [date, donor_name, finalAmount, 'CREDIT', denomination, sl_no, receipt_no]
+      );
+    }
+
+    setFormMode(null);
+    refreshData();
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm("Delete this receipt permanently?")) {
+      await deleteDonation(id);
+      refreshData();
+    }
+  };
+
+  // --- FIXED IMPORT LOGIC ---
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      setStatusMsg("Reading Receipt Books...");
+      const bstr = evt.target.result;
+      const wb = XLSX.read(bstr, { type: 'binary' });
+      const db = await getDB();
+      let count = 0;
+
+      for (const sheetName of wb.SheetNames) {
+        // 1. Get Category (Denomination) from Sheet Name
+        const cleanSheetName = sheetName.replace(/,/g, '').trim();
+        const sheetDenom = parseInt(cleanSheetName);
+
+        if (isNaN(sheetDenom)) continue;
+
+        const ws = wb.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(ws);
+        
+        for (const row of data) {
+          const sl = row['Sl No'] || row['Sl.No'] || row['Sl. No'] || '';
+          const rcpt = row['Receipt No'] || row['Receipt no'] || '';
+          const name = row['Name & Address'] || row.Name || "Unknown";
+          const date = row.Date || new Date().toISOString().split('T')[0];
+          
+          // 2. FIXED: Trust the Excel 'Amount' column if it exists.
+          // Fallback to sheetDenom only if Amount is missing.
+          let realAmount = sheetDenom;
+          if (row.Amount !== undefined) {
+             // Handle "5,00,000" string formats
+             const cleanAmt = String(row.Amount).replace(/,/g, '');
+             realAmount = parseFloat(cleanAmt) || sheetDenom;
+          }
+
+          if (realAmount > 0) {
+            await db.run(
+              `INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
+              [date, name, realAmount, 'CREDIT', sheetDenom, sl, rcpt]
+            );
+            count++;
+          }
+        }
+      }
+      setStatusMsg(`Success! Imported ${count} receipts.`);
+      refreshData();
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const filteredDonations = donations.filter(item => {
+    const matchesSearch = item.donor_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          (item.receipt_no && item.receipt_no.toString().includes(searchTerm));
+    const matchesDenom = filterDenom ? item.denomination == filterDenom : true;
+    return matchesSearch && matchesDenom;
+  });
+
+  // --- DASHBOARD UI ---
   const Dashboard = () => (
     <div className="flex flex-col items-center w-full max-w-sm">
       <div className="bg-white p-6 rounded-xl shadow-lg w-full text-center border-t-4 border-orange-500">
@@ -265,7 +286,6 @@ function App() {
         <div className="w-8"></div>
       </div>
 
-      {/* FILTERS */}
       <div className="bg-white p-3 rounded-lg shadow-sm mb-4 space-y-2">
         <div className="flex gap-2">
           <input 
@@ -319,7 +339,18 @@ function App() {
     <div className="min-h-screen bg-gray-100 flex flex-col items-center p-4 font-sans">
       <h1 className="text-2xl font-bold text-orange-600 mt-2 mb-4">Temple Ledger</h1>
       {view === 'dashboard' ? <Dashboard /> : <HistoryList />}
-      {formMode && <TransactionPopup />}
+      
+      {/* RENDER POPUP HERE - OUTSIDE DASHBOARD */}
+      {formMode && (
+        <TransactionPopup 
+          formMode={formMode} 
+          formData={formData} 
+          setFormData={setFormData} 
+          setFormMode={setFormMode} 
+          handleSave={handleSave}
+          DENOMINATIONS={DENOMINATIONS}
+        />
+      )}
     </div>
   );
 }
