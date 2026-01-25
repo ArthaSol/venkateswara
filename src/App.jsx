@@ -5,11 +5,19 @@ import { generatePDFData } from './pdfGenerator';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
-// HELPER: Display Date as DD-MM-YYYY
 const formatDateIN = (dateStr) => {
   if (!dateStr) return "";
   const [y, m, d] = dateStr.split('-');
   return `${d}-${m}-${y}`;
+};
+
+const formatCurrencyIN = (amount) => {
+  if (!amount) return "0";
+  const str = Math.round(amount).toString();
+  let lastThree = str.substring(str.length - 3);
+  let otherNumbers = str.substring(0, str.length - 3);
+  if (otherNumbers !== '') lastThree = ',' + lastThree;
+  return otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + lastThree;
 };
 
 // ==========================================
@@ -31,7 +39,7 @@ const TransactionPopup = ({ formMode, formData, setFormData, setFormMode, handle
             }}
             className="border-2 border-orange-200 p-3 rounded text-xl font-bold text-orange-700 bg-orange-50"
           >
-            {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {d.toLocaleString('en-IN')}</option>)}
+            {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {formatCurrencyIN(d)}</option>)}
           </select>
           <div className="flex gap-2">
             <div className="flex-1">
@@ -48,7 +56,6 @@ const TransactionPopup = ({ formMode, formData, setFormData, setFormMode, handle
           <label className="text-sm font-bold text-gray-700">Name & Address</label>
           <textarea rows="2" value={formData.donor_name} onChange={(e) => setFormData({...formData, donor_name: e.target.value})} className="border p-2 rounded text-lg"></textarea>
           <label className="text-sm font-bold text-gray-700">Date</label>
-          {/* Note: Input Type Date MUST use YYYY-MM-DD for value, but user sees system format */}
           <input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className="border p-2 rounded"/>
           <div className="flex gap-2 mt-4">
             <button type="button" onClick={() => setFormMode(null)} className="flex-1 bg-gray-200 py-3 rounded font-bold">Cancel</button>
@@ -83,7 +90,7 @@ const ReportPopup = ({ isOpen, onClose, DENOMINATIONS, onGenerate }) => {
             <label className="text-sm font-bold text-gray-700 block mb-1">Which Denomination?</label>
             <select value={denom} onChange={(e) => setDenom(e.target.value)} className="w-full border p-2 rounded bg-gray-50">
               <option value="ALL">All Denominations (Full Report)</option>
-              {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {d.toLocaleString('en-IN')}</option>)}
+              {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {formatCurrencyIN(d)}</option>)}
             </select>
           </div>
           <div>
@@ -104,14 +111,13 @@ const ReportPopup = ({ isOpen, onClose, DENOMINATIONS, onGenerate }) => {
 };
 
 // ==========================================
-// 3. DASHBOARD COMPONENT
+// 3. DASHBOARD COMPONENT (Updated with Export Button)
 // ==========================================
-const Dashboard = ({ totalFund, openAdd, setView, isToolsOpen, setIsToolsOpen, handleFileUpload, statusMsg, openReport }) => (
+const Dashboard = ({ totalFund, openAdd, setView, isToolsOpen, setIsToolsOpen, handleFileUpload, handleExportBackup, statusMsg, openReport }) => (
   <div className="flex flex-col items-center w-full max-w-sm">
     <div className="bg-white p-6 rounded-xl shadow-lg w-full text-center border-t-4 border-orange-500">
       <p className="text-gray-500 text-sm uppercase tracking-wide">Total Fund</p>
-      {/* INDIAN CURRENCY FORMAT */}
-      <h2 className="text-4xl font-extrabold text-gray-800 my-2">₹ {totalFund.toLocaleString('en-IN')}</h2>
+      <h2 className="text-4xl font-extrabold text-gray-800 my-2">₹ {formatCurrencyIN(totalFund)}</h2>
       <p className="text-xs text-green-600 font-semibold bg-green-100 inline-block px-2 py-1 rounded">Safe & Verified</p>
     </div>
     <div className="w-full mt-8">
@@ -124,6 +130,12 @@ const Dashboard = ({ totalFund, openAdd, setView, isToolsOpen, setIsToolsOpen, h
     {isToolsOpen && (
       <div className="mt-4 w-full space-y-3">
         <button onClick={openReport} className="w-full bg-blue-600 text-white py-3 rounded-lg shadow font-bold flex items-center justify-center gap-2">📄 Generate PDF Report</button>
+        
+        {/* NEW EXPORT BUTTON */}
+        <button onClick={handleExportBackup} className="w-full bg-green-600 text-white py-3 rounded-lg shadow font-bold flex items-center justify-center gap-2">
+            📤 Export Backup (Excel)
+        </button>
+
         <div className="bg-white p-4 rounded-lg shadow w-full">
           <label className="block w-full bg-blue-50 text-blue-700 py-3 rounded text-center font-bold cursor-pointer text-sm">
             📂 Import Excel
@@ -137,7 +149,7 @@ const Dashboard = ({ totalFund, openAdd, setView, isToolsOpen, setIsToolsOpen, h
 );
 
 // ==========================================
-// 4. HISTORY LIST COMPONENT
+// 4. HISTORY LIST COMPONENT (Updated to CARD LAYOUT)
 // ==========================================
 const HistoryList = ({ setView, searchTerm, setSearchTerm, filterDenom, setFilterDenom, DENOMINATIONS, filteredDonations, openEdit, handleDelete }) => (
   <div className="w-full max-w-sm flex flex-col h-screen pb-4">
@@ -155,27 +167,34 @@ const HistoryList = ({ setView, searchTerm, setSearchTerm, filterDenom, setFilte
         </select>
       </div>
     </div>
-    <div className="flex-1 overflow-y-auto bg-white rounded-xl shadow-inner p-2 space-y-2">
+    <div className="flex-1 overflow-y-auto bg-gray-50 rounded-xl p-2 space-y-3">
       {filteredDonations.length === 0 ? <p className="text-center text-gray-400 mt-10">No receipts found.</p> : filteredDonations.map((item) => (
-        <div key={item.id} className="flex items-center justify-between p-3 border-b border-gray-100">
-          <div className="flex flex-col">
-            <span className="font-bold text-gray-800 text-lg">{item.donor_name}</span>
-            <span className="text-xs text-gray-400">
-              Rcpt: <b className="text-gray-600">{item.receipt_no}</b> • Sl: {item.sl_no}
-            </span>
+        
+        // --- NEW CARD LAYOUT ---
+        <div key={item.id} className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 flex flex-col gap-2">
+          
+          {/* Row 1: Name and Amount */}
+          <div className="flex justify-between items-start">
+             <span className="font-bold text-gray-800 text-lg w-2/3 leading-tight">{item.donor_name}</span>
+             <span className="font-bold text-green-700 text-lg">₹{formatCurrencyIN(item.amount)}</span>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              {/* INDIAN CURRENCY FORMAT */}
-              <span className="block font-bold text-green-600 text-lg">₹{item.amount.toLocaleString('en-IN')}</span>
-              {/* INDIAN DATE FORMAT (DD-MM-YYYY) */}
-              <span className="block text-xs text-gray-400">{formatDateIN(item.date)}</span>
-            </div>
-            <div className="flex gap-2 ml-2">
-              <button onClick={() => openEdit(item)} className="p-1 bg-blue-100 text-blue-600 rounded text-xs">✏️</button>
-              <button onClick={() => handleDelete(item.id)} className="p-1 bg-red-100 text-red-600 rounded text-xs">🗑️</button>
-            </div>
+
+          {/* Row 2: Metadata */}
+          <div className="flex justify-between text-xs text-gray-500 border-b border-gray-100 pb-2">
+             <span>Rcpt: <b className="text-gray-700">{item.receipt_no}</b> • Sl: {item.sl_no}</span>
+             <span>{formatDateIN(item.date)}</span>
           </div>
+
+          {/* Row 3: Action Buttons (Big Targets) */}
+          <div className="flex gap-2 mt-1">
+             <button onClick={() => openEdit(item)} className="flex-1 py-2 bg-blue-50 text-blue-700 rounded font-semibold text-sm hover:bg-blue-100">
+                ✏️ Edit
+             </button>
+             <button onClick={() => handleDelete(item.id)} className="flex-1 py-2 bg-red-50 text-red-700 rounded font-semibold text-sm hover:bg-red-100">
+                🗑️ Delete
+             </button>
+          </div>
+
         </div>
       ))}
     </div>
@@ -247,7 +266,6 @@ function App() {
 
   const handleGeneratePDF = async (denom, startDate, endDate) => {
     setIsGenerating(true); 
-    
     setTimeout(async () => {
       try {
         let filtered = donations;
@@ -258,7 +276,7 @@ function App() {
         }
         if (startDate && endDate) { 
           filtered = filtered.filter(d => d.date >= startDate && d.date <= endDate); 
-          filterTxt += ` | Date: ${startDate} to ${endDate}`; 
+          filterTxt += ` | Date: ${formatDateIN(startDate)} to ${formatDateIN(endDate)}`; 
         } else { 
           filterTxt += ` | Date: All Time`; 
         }
@@ -288,6 +306,55 @@ function App() {
         setIsGenerating(false);
       }
     }, 500);
+  };
+
+  // --- EXPORT BACKUP FUNCTION ---
+  const handleExportBackup = async () => {
+    try {
+        setStatusMsg("Creating Excel Backup...");
+        // 1. Prepare Data for Excel (Format dates neatly)
+        const exportData = donations.map(d => ({
+            "Date": formatDateIN(d.date),
+            "Sl No": d.sl_no,
+            "Receipt No": d.receipt_no,
+            "Name & Address": d.donor_name,
+            "Amount": d.amount,
+            "Denomination": d.denomination
+        }));
+
+        // 2. Create Workbook
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Donations");
+
+        // 3. Write to Base64
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+
+        // 4. Save with Date in Filename
+        const today = new Date();
+        const dateStr = `${String(today.getDate()).padStart(2,'0')}-${String(today.getMonth()+1).padStart(2,'0')}-${today.getFullYear()}`;
+        const fileName = `Temple_Backup_${dateStr}.xlsx`;
+
+        const savedFile = await Filesystem.writeFile({
+            path: fileName,
+            data: wbout,
+            directory: Directory.Documents,
+            recursive: true
+        });
+
+        // 5. Share
+        await Share.share({
+            title: 'Temple Database Backup',
+            text: `Backup created on ${dateStr}`,
+            url: savedFile.uri,
+            dialogTitle: 'Save Backup File'
+        });
+
+        setStatusMsg("Backup Shared Successfully!");
+    } catch (error) {
+        console.error("Export Error:", error);
+        alert("Export Failed: " + error.message);
+    }
   };
 
   const parseExcelDate = (input) => {
@@ -365,7 +432,7 @@ function App() {
     <div className="min-h-screen bg-gray-100 flex flex-col items-center p-4 font-sans">
       <h1 className="text-2xl font-bold text-orange-600 mt-2 mb-4">Temple Ledger</h1>
       {view === 'dashboard' ? (
-        <Dashboard totalFund={totalFund} openAdd={openAdd} setView={setView} isToolsOpen={isToolsOpen} setIsToolsOpen={setIsToolsOpen} handleFileUpload={handleFileUpload} statusMsg={statusMsg} openReport={() => setIsReportOpen(true)}/>
+        <Dashboard totalFund={totalFund} openAdd={openAdd} setView={setView} isToolsOpen={isToolsOpen} setIsToolsOpen={setIsToolsOpen} handleFileUpload={handleFileUpload} handleExportBackup={handleExportBackup} statusMsg={statusMsg} openReport={() => setIsReportOpen(true)}/>
       ) : (
         <HistoryList setView={setView} searchTerm={searchTerm} setSearchTerm={setSearchTerm} filterDenom={filterDenom} setFilterDenom={setFilterDenom} DENOMINATIONS={DENOMINATIONS} filteredDonations={filteredDonations} openEdit={openEdit} handleDelete={handleDelete}/>
       )}
