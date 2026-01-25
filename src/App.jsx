@@ -375,7 +375,7 @@ function App() {
     return new Date().toISOString().split('T')[0];
   };
 
-  const handleFileUpload = (e) => {
+const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -385,31 +385,57 @@ function App() {
       const wb = XLSX.read(bstr, { type: 'binary' });
       const db = await getDB();
       let count = 0;
+      
       for (const sheetName of wb.SheetNames) {
+        // 1. Try to guess denomination from Sheet Name (Old Format)
         const cleanSheetName = sheetName.replace(/,/g, '').trim();
-        const sheetDenom = parseInt(cleanSheetName);
-        if (isNaN(sheetDenom)) continue;
+        const sheetDenomFallback = parseInt(cleanSheetName);
+        
         const ws = wb.Sheets[sheetName];
         const data = XLSX.utils.sheet_to_json(ws);
+        
         for (const row of data) {
+          // 2. Identify Metadata
           const sl = row['Sl No'] || row['Sl.No'] || row['Sl. No'];
           const rcpt = row['Receipt No'] || row['Receipt no'] || 'Pending';
           const name = row['Name & Address'] || row.Name || "To be updated"; 
           const rawDate = row.Date; 
           const date = parseExcelDate(rawDate);
 
+          // 3. DETERMINE DENOMINATION (The Smart Logic)
+          let finalDenom = 0;
+          
+          // Priority A: Check if row has "Denomination" column (Backup File)
+          if (row['Denomination']) {
+             finalDenom = parseInt(row['Denomination']);
+          } 
+          // Priority B: Use Sheet Name (Old Excel)
+          else if (!isNaN(sheetDenomFallback)) {
+             finalDenom = sheetDenomFallback;
+          }
+
+          // If we still don't know the denomination, skip this row
+          if (!finalDenom || finalDenom === 0) continue;
+
+          // 4. DETERMINE AMOUNT
           let finalAmount = 0;
           let hasAmountInExcel = false;
+          
           if (row.Amount !== undefined) {
              const cleanAmt = String(row.Amount).replace(/,/g, '');
              const parsed = parseFloat(cleanAmt);
              if (parsed > 0) { finalAmount = parsed; hasAmountInExcel = true; }
           }
-          if (!hasAmountInExcel && sl) { finalAmount = sheetDenom; }
+          
+          // If Amount is missing in Excel, assume it equals the Denomination (Old Format behavior)
+          if (!hasAmountInExcel && sl) { finalAmount = finalDenom; }
+
+          // 5. VALIDATE AND INSERT
           if (!sl && !hasAmountInExcel) continue;
+          
           if (finalAmount > 0) {
             await db.run(`INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
-              [date, name, finalAmount, 'CREDIT', sheetDenom, sl || 'Pending', rcpt]);
+              [date, name, finalAmount, 'CREDIT', finalDenom, sl || 'Pending', rcpt]);
             count++;
           }
         }
