@@ -309,28 +309,47 @@ function App() {
   };
 
   // --- EXPORT BACKUP FUNCTION ---
+ // --- EXPORT BACKUP FUNCTION (MULTI-SHEET) ---
   const handleExportBackup = async () => {
     try {
-        setStatusMsg("Creating Excel Backup...");
-        // 1. Prepare Data for Excel (Format dates neatly)
-        const exportData = donations.map(d => ({
-            "Date": formatDateIN(d.date),
-            "Sl No": d.sl_no,
-            "Receipt No": d.receipt_no,
-            "Name & Address": d.donor_name,
-            "Amount": d.amount,
-            "Denomination": d.denomination
-        }));
-
-        // 2. Create Workbook
-        const ws = XLSX.utils.json_to_sheet(exportData);
+        setStatusMsg("Creating Multi-Sheet Backup...");
+        
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Donations");
+        
+        // 1. Get unique denominations from data
+        const uniqueDenoms = [...new Set(donations.map(d => d.denomination))];
+        // Sort them (100, 200, 500...)
+        uniqueDenoms.sort((a, b) => a - b);
+
+        if (uniqueDenoms.length === 0) {
+             alert("No data to export!");
+             return;
+        }
+
+        // 2. Loop through each denomination and create a sheet
+        uniqueDenoms.forEach(denom => {
+            // Filter data for this sheet
+            const sheetRows = donations
+                .filter(d => d.denomination == denom)
+                .map(d => ({
+                    "Date": formatDateIN(d.date),
+                    "Sl No": d.sl_no,
+                    "Receipt No": d.receipt_no,
+                    "Name & Address": d.donor_name,
+                    "Amount": d.amount
+                    // We don't need 'Denomination' column anymore 
+                    // because the Sheet Name tells us what it is.
+                }));
+
+            const ws = XLSX.utils.json_to_sheet(sheetRows);
+            // Name the sheet simply "100", "500", etc.
+            XLSX.utils.book_append_sheet(wb, ws, String(denom));
+        });
 
         // 3. Write to Base64
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
 
-        // 4. Save with Date in Filename
+        // 4. Save
         const today = new Date();
         const dateStr = `${String(today.getDate()).padStart(2,'0')}-${String(today.getMonth()+1).padStart(2,'0')}-${today.getFullYear()}`;
         const fileName = `Temple_Backup_${dateStr}.xlsx`;
