@@ -310,15 +310,15 @@ function App() {
 
   // --- EXPORT BACKUP FUNCTION ---
  // --- EXPORT BACKUP FUNCTION (MULTI-SHEET) ---
+// --- EXPORT BACKUP FUNCTION (FIXED: Uses Directory.Cache) ---
   const handleExportBackup = async () => {
     try {
         setStatusMsg("Creating Multi-Sheet Backup...");
         
         const wb = XLSX.utils.book_new();
         
-        // 1. Get unique denominations from data
+        // 1. Get unique denominations
         const uniqueDenoms = [...new Set(donations.map(d => d.denomination))];
-        // Sort them (100, 200, 500...)
         uniqueDenoms.sort((a, b) => a - b);
 
         if (uniqueDenoms.length === 0) {
@@ -328,7 +328,6 @@ function App() {
 
         // 2. Loop through each denomination and create a sheet
         uniqueDenoms.forEach(denom => {
-            // Filter data for this sheet
             const sheetRows = donations
                 .filter(d => d.denomination == denom)
                 .map(d => ({
@@ -337,27 +336,24 @@ function App() {
                     "Receipt No": d.receipt_no,
                     "Name & Address": d.donor_name,
                     "Amount": d.amount
-                    // We don't need 'Denomination' column anymore 
-                    // because the Sheet Name tells us what it is.
                 }));
 
             const ws = XLSX.utils.json_to_sheet(sheetRows);
-            // Name the sheet simply "100", "500", etc.
             XLSX.utils.book_append_sheet(wb, ws, String(denom));
         });
 
-        // 3. Write to Base64
+        // 3. Write File
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
 
-        // 4. Save
         const today = new Date();
         const dateStr = `${String(today.getDate()).padStart(2,'0')}-${String(today.getMonth()+1).padStart(2,'0')}-${today.getFullYear()}`;
         const fileName = `Temple_Backup_${dateStr}.xlsx`;
 
+        // 4. Save to Cache (Safe Zone)
         const savedFile = await Filesystem.writeFile({
             path: fileName,
             data: wbout,
-            directory: Directory.Documents,
+            directory: Directory.Cache, // <--- THE FIX
             recursive: true
         });
 
