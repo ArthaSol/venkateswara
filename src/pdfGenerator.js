@@ -31,7 +31,7 @@ export const generatePDFData = (donations, filterDetails) => {
 
   // --- OFFICIAL HEADER LAYOUT ---
   
-  // if (TEMPLE_LOGO_BASE64) doc.addImage(TEMPLE_LOGO_BASE64, 'PNG', 14, 10, 25, 25);
+  if (TEMPLE_LOGO_BASE64) doc.addImage(TEMPLE_LOGO_BASE64, 'PNG', 14, 10, 25, 25);
 
   doc.setFont("times", "bold"); // SWITCHED TO TIMES NEW ROMAN
   doc.setTextColor(220, 80, 0); // Orange
