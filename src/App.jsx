@@ -29,8 +29,9 @@ const formatCurrencyIN = (amount) => {
 };
 
 // HELPER: Fix Excel Dates
+// FIXED: Defaults to 2000-01-01 if date is missing, so it doesn't mess up "Today's" count
 const parseExcelDate = (input) => {
-  if (!input) return getTodayStr();
+  if (!input) return "2000-01-01"; 
   if (typeof input === 'number') {
     const date = new Date(Math.round((input - 25569) * 86400 * 1000));
     return date.toISOString().split('T')[0];
@@ -44,7 +45,7 @@ const parseExcelDate = (input) => {
     if (year.length === 2) year = "20" + year;
     return `${year}-${month}-${day}`; 
   }
-  return getTodayStr();
+  return "2000-01-01"; // Fallback to past
 };
 
 const triggerHaptic = async () => {
@@ -62,7 +63,21 @@ const Icons = {
 };
 
 // ==========================================
-// COMPONENT 1: HOME SCREEN (Moved Outside)
+// TOAST NOTIFICATION COMPONENT (New)
+// ==========================================
+const Toast = ({ show, message, type }) => {
+  if (!show) return null;
+  const bgColor = type === 'error' ? 'bg-red-600' : 'bg-gray-900';
+  return (
+    <div className={`fixed top-12 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-6 py-3 rounded-full shadow-2xl ${bgColor} text-white animate-slide-down`}>
+      <span className="text-lg">{type === 'error' ? '⚠️' : '✅'}</span>
+      <span className="font-bold text-sm tracking-wide">{message}</span>
+    </div>
+  );
+};
+
+// ==========================================
+// COMPONENT: HOME SCREEN
 // ==========================================
 const HomeScreen = ({ totalFund, todayTotal, donations }) => (
   <div className="flex flex-col gap-6 pb-24">
@@ -105,7 +120,7 @@ const HomeScreen = ({ totalFund, todayTotal, donations }) => (
 );
 
 // ==========================================
-// COMPONENT 2: LEDGER SCREEN (Moved Outside to Fix Keyboard)
+// COMPONENT: LEDGER SCREEN
 // ==========================================
 const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit }) => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -120,7 +135,6 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit }) => {
 
   return (
     <div className="flex flex-col h-full pb-24">
-      {/* Search Bar - Logic is now stable */}
       <div className="sticky top-0 bg-orange-50 pt-2 pb-4 z-10">
          <input 
            type="text" 
@@ -129,7 +143,6 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit }) => {
            onChange={e => setSearchTerm(e.target.value)} 
            className="w-full bg-white border-none shadow-sm p-4 rounded-xl font-medium text-gray-700 outline-none focus:ring-2 focus:ring-orange-200"
          />
-         
          <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar">
             <button onClick={()=>setFilterDenom("")} className={`px-4 py-1 rounded-full text-xs font-bold whitespace-nowrap ${filterDenom==="" ? 'bg-orange-600 text-white' : 'bg-white text-gray-500'}`}>All</button>
             {DENOMINATIONS.map(d => (
@@ -151,7 +164,8 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit }) => {
                 </div>
                 <div className="text-right">
                   <span className="block font-black text-xl text-green-700">₹{formatCurrencyIN(item.amount)}</span>
-                  <span className="text-xs text-gray-400">{formatDateIN(item.date)}</span>
+                  {/* FIXED: whitespace-nowrap prevents cramping */}
+                  <span className="text-xs text-gray-400 whitespace-nowrap">{formatDateIN(item.date)}</span>
                 </div>
              </div>
              <button onClick={()=>openEdit(item)} className="w-full mt-2 py-2 bg-blue-50 text-blue-600 font-bold rounded-lg text-sm flex items-center justify-center gap-2 hover:bg-blue-100">
@@ -165,7 +179,7 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit }) => {
 };
 
 // ==========================================
-// COMPONENT 3: REPORT FILTER SHEET (New Feature)
+// COMPONENT: REPORT FILTER SHEET
 // ==========================================
 const ReportFilterSheet = ({ isOpen, onClose, DENOMINATIONS, onGenerate }) => {
   if (!isOpen) return null;
@@ -182,19 +196,16 @@ const ReportFilterSheet = ({ isOpen, onClose, DENOMINATIONS, onGenerate }) => {
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black bg-opacity-60 backdrop-blur-sm">
       <div className="w-full bg-white rounded-t-2xl p-6 animate-slide-up shadow-2xl">
         <h3 className="text-xl font-bold mb-4 text-orange-700">📄 Generate PDF Report</h3>
-        
         <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Denomination</label>
         <select value={denom} onChange={(e) => setDenom(e.target.value)} className="w-full border p-3 rounded-xl mb-4 font-bold bg-gray-50">
           <option value="ALL">All Denominations (Full)</option>
           {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {formatCurrencyIN(d)}</option>)}
         </select>
-
         <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Date Range (Optional)</label>
         <div className="flex gap-2 mb-6">
           <input type="date" className="border p-3 rounded-xl w-full" value={startDate} onChange={e => setStartDate(e.target.value)} />
           <input type="date" className="border p-3 rounded-xl w-full" value={endDate} onChange={e => setEndDate(e.target.value)} />
         </div>
-
         <button onClick={handleGen} className="w-full bg-orange-600 text-white font-bold py-4 rounded-xl shadow-lg text-lg">Download PDF</button>
         <button onClick={onClose} className="w-full py-4 text-gray-500 font-bold mt-2">Cancel</button>
       </div>
@@ -203,7 +214,7 @@ const ReportFilterSheet = ({ isOpen, onClose, DENOMINATIONS, onGenerate }) => {
 };
 
 // ==========================================
-// COMPONENT 4: TRANSACTION SHEET (Add/Edit)
+// COMPONENT: TRANSACTION SHEET
 // ==========================================
 const TransactionSheet = ({ formMode, formData, setFormData, setFormMode, handleSave, DENOMINATIONS }) => {
   if (!formMode) return null;
@@ -283,7 +294,10 @@ function App() {
   const [todayTotal, setTodayTotal] = useState(0);
   const [donations, setDonations] = useState([]);
   
-  // States
+  // Toast State
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  
+  // App States
   const [formMode, setFormMode] = useState(null);
   const [formData, setFormData] = useState({ id: null, donor_name: '', denomination: '100', amount: '100', sl_no: '', receipt_no: '', date: '' });
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
@@ -295,12 +309,16 @@ function App() {
     setup();
   }, []);
 
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
+  };
+
   const refreshData = async () => {
     const db = await getDB();
     const resTotal = await db.query("SELECT SUM(amount) as t FROM donations WHERE type='CREDIT'");
     setTotalFund(resTotal.values[0].t || 0);
 
-    // FIX: Use getTodayStr() (Local Time) instead of UTC
     const todayStr = getTodayStr(); 
     const resToday = await db.query(`SELECT SUM(amount) as t FROM donations WHERE date = '${todayStr}'`);
     setTodayTotal(resToday.values[0].t || 0);
@@ -329,8 +347,10 @@ function App() {
     
     if (formMode === 'EDIT') {
       await db.run("UPDATE donations SET donor_name=?, amount=?, denomination=?, sl_no=?, receipt_no=?, date=? WHERE id=?", [donor_name, finalAmount, denomination, sl_no, receipt_no, date, id]);
+      showToast('Receipt Updated!');
     } else {
       await db.run("INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)", [date, donor_name, finalAmount, 'CREDIT', denomination, sl_no, receipt_no]);
+      showToast('Receipt Saved Successfully!');
     }
     triggerHaptic();
     setFormMode(null);
@@ -341,6 +361,7 @@ function App() {
     triggerHaptic();
     if (window.confirm("Delete this receipt permanently?")) {
       await deleteDonation(id);
+      showToast('Receipt Deleted', 'error');
       refreshData();
     }
   };
@@ -349,8 +370,6 @@ function App() {
     try {
       let filtered = donations;
       let filterTxt = "All Denominations";
-
-      // Filter Logic
       if (denom !== "ALL") { 
         filtered = filtered.filter(d => d.denomination == denom); 
         filterTxt = `Denomination: ${denom}`; 
@@ -359,20 +378,20 @@ function App() {
         filtered = filtered.filter(d => d.date >= startDate && d.date <= endDate); 
         filterTxt += ` | Date: ${formatDateIN(startDate)} to ${formatDateIN(endDate)}`; 
       }
-
       const pdfDataUri = generatePDFData(filtered, filterTxt);
       const base64Data = pdfDataUri.split(',')[1];
       const fileName = `Temple_Report_${Date.now()}.pdf`;
       const savedFile = await Filesystem.writeFile({ path: fileName, data: base64Data, directory: Directory.Documents, recursive: true });
       await Share.share({ title: 'Temple Report', url: savedFile.uri });
-    } catch (error) { alert("PDF Error: " + error.message); }
+      showToast('PDF Generated!');
+    } catch (error) { showToast(error.message, 'error'); }
   };
 
   const handleExportBackup = async () => {
     try {
         const wb = XLSX.utils.book_new();
         const uniqueDenoms = [...new Set(donations.map(d => d.denomination))].sort((a, b) => a - b);
-        if (uniqueDenoms.length === 0) { alert("No data!"); return; }
+        if (uniqueDenoms.length === 0) { showToast("No data to export!", 'error'); return; }
         uniqueDenoms.forEach(denom => {
             const sheetRows = donations.filter(d => d.denomination == denom).map(d => ({
                 "Date": formatDateIN(d.date), "Sl No": d.sl_no, "Receipt No": d.receipt_no, "Name & Address": d.donor_name, "Amount": d.amount
@@ -383,7 +402,8 @@ function App() {
         const fileName = `Temple_Backup_${getTodayStr()}.xlsx`;
         const savedFile = await Filesystem.writeFile({ path: fileName, data: wbout, directory: Directory.Cache, recursive: true });
         await Share.share({ title: 'Temple Backup', url: savedFile.uri });
-    } catch (error) { alert("Export Failed: " + error.message); }
+        showToast('Backup Created!');
+    } catch (error) { showToast("Export Failed", 'error'); }
   };
 
   const handleFileUpload = (e) => {
@@ -406,6 +426,7 @@ function App() {
               const rcpt = row['Receipt No'] || row['Receipt no'] || 'Pending';
               const name = row['Name & Address'] || row.Name || "To be updated"; 
               const rawDate = row.Date; 
+              // FIXED: Date defaults to 2000-01-01 if missing
               const date = parseExcelDate(rawDate);
               let finalDenom = 0;
               if (row['Denomination']) finalDenom = parseInt(row['Denomination']);
@@ -428,14 +449,14 @@ function App() {
             }
           }
           triggerHaptic();
-          alert(`Success! Imported ${count} receipts.`);
+          showToast(`Success! Imported ${count} receipts.`);
           refreshData();
-      } catch(err) { alert("Import Error: " + err.message); }
+      } catch(err) { showToast("Import Error: " + err.message, 'error'); }
     };
     reader.readAsBinaryString(file);
   };
 
-  // --- SCREEN: REPORTS (Moved Outside logic check) ---
+  // --- SCREEN: REPORTS ---
   const ReportsScreen = () => (
     <div className="flex flex-col gap-4 pb-24">
        <h2 className="text-2xl font-bold text-gray-800 px-2">Tools & Reports</h2>
@@ -466,6 +487,8 @@ function App() {
 
   return (
     <div className="min-h-screen bg-orange-50 font-sans text-gray-900">
+      <Toast show={toast.show} message={toast.message} type={toast.type} />
+
       <div className="sticky top-0 bg-white/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b border-orange-100 flex items-center gap-3 shadow-sm">
          <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center text-white font-bold">🕉️</div>
          <h1 className="font-bold text-gray-800 text-lg">Sri Venkateswara Swamy Temple</h1>
@@ -473,7 +496,6 @@ function App() {
 
       <div className="p-4 max-w-md mx-auto min-h-screen">
         {activeTab === 'home' && <HomeScreen totalFund={totalFund} todayTotal={todayTotal} donations={donations} />}
-        
         {activeTab === 'ledger' && (
            <LedgerScreen 
               donations={donations} 
@@ -482,7 +504,6 @@ function App() {
               openEdit={openEdit} 
            />
         )}
-        
         {activeTab === 'reports' && <ReportsScreen />}
       </div>
 
@@ -508,7 +529,6 @@ function App() {
       </div>
 
       <TransactionSheet formMode={formMode} formData={formData} setFormData={setFormData} setFormMode={setFormMode} handleSave={handleSave} DENOMINATIONS={DENOMINATIONS}/>
-      
       <ReportFilterSheet isOpen={isReportSheetOpen} onClose={() => setIsReportSheetOpen(false)} DENOMINATIONS={DENOMINATIONS} onGenerate={handleGeneratePDF}/>
     </div>
   );
