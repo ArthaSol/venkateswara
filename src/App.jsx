@@ -29,7 +29,6 @@ const formatCurrencyIN = (amount) => {
 };
 
 // HELPER: Fix Excel Dates
-// FIXED: Defaults to 2000-01-01 if date is missing, so it doesn't mess up "Today's" count
 const parseExcelDate = (input) => {
   if (!input) return "2000-01-01"; 
   if (typeof input === 'number') {
@@ -45,7 +44,7 @@ const parseExcelDate = (input) => {
     if (year.length === 2) year = "20" + year;
     return `${year}-${month}-${day}`; 
   }
-  return "2000-01-01"; // Fallback to past
+  return "2000-01-01"; 
 };
 
 const triggerHaptic = async () => {
@@ -63,14 +62,17 @@ const Icons = {
 };
 
 // ==========================================
-// TOAST NOTIFICATION COMPONENT (New)
+// TOAST NOTIFICATION (RE-DESIGNED: BOTTOM & GLASS)
 // ==========================================
 const Toast = ({ show, message, type }) => {
   if (!show) return null;
-  const bgColor = type === 'error' ? 'bg-red-600' : 'bg-gray-900';
+  // Green border for success, Red for error. White background with Blur.
+  const borderClass = type === 'error' ? 'border-red-500 text-red-700' : 'border-green-500 text-green-800';
+  
   return (
-    <div className={`fixed top-12 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-6 py-3 rounded-full shadow-2xl ${bgColor} text-white animate-slide-down`}>
-      <span className="text-lg">{type === 'error' ? '⚠️' : '✅'}</span>
+    // Moved to BOTTOM-24 (Just above nav bar)
+    <div className={`fixed bottom-24 left-4 right-4 z-[100] flex items-center gap-3 px-6 py-4 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] bg-white/95 backdrop-blur-md border-l-8 ${borderClass} animate-slide-up`}>
+      <span className="text-xl">{type === 'error' ? '⚠️' : '✅'}</span>
       <span className="font-bold text-sm tracking-wide">{message}</span>
     </div>
   );
@@ -164,7 +166,6 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit }) => {
                 </div>
                 <div className="text-right">
                   <span className="block font-black text-xl text-green-700">₹{formatCurrencyIN(item.amount)}</span>
-                  {/* FIXED: whitespace-nowrap prevents cramping */}
                   <span className="text-xs text-gray-400 whitespace-nowrap">{formatDateIN(item.date)}</span>
                 </div>
              </div>
@@ -297,7 +298,6 @@ function App() {
   // Toast State
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   
-  // App States
   const [formMode, setFormMode] = useState(null);
   const [formData, setFormData] = useState({ id: null, donor_name: '', denomination: '100', amount: '100', sl_no: '', receipt_no: '', date: '' });
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
@@ -426,7 +426,6 @@ function App() {
               const rcpt = row['Receipt No'] || row['Receipt no'] || 'Pending';
               const name = row['Name & Address'] || row.Name || "To be updated"; 
               const rawDate = row.Date; 
-              // FIXED: Date defaults to 2000-01-01 if missing
               const date = parseExcelDate(rawDate);
               let finalDenom = 0;
               if (row['Denomination']) finalDenom = parseInt(row['Denomination']);
@@ -489,9 +488,19 @@ function App() {
     <div className="min-h-screen bg-orange-50 font-sans text-gray-900">
       <Toast show={toast.show} message={toast.message} type={toast.type} />
 
+      {/* HEADER: UPDATED WITH CUSTOM LOGO & SERIF FONT */}
       <div className="sticky top-0 bg-white/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b border-orange-100 flex items-center gap-3 shadow-sm">
-         <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center text-white font-bold">🕉️</div>
-         <h1 className="font-bold text-gray-800 text-lg">Sri Venkateswara Swamy Temple</h1>
+         {/* CUSTOM LOGO: Place 'logo.png' in public folder. If missing, it falls back to 🕉️ */}
+         <img 
+           src="/logo.png" 
+           alt="Logo"
+           onError={(e) => {e.target.style.display='none'; e.target.nextSibling.style.display='flex'}}
+           className="w-10 h-10 object-contain"
+         />
+         <div className="w-8 h-8 bg-orange-600 rounded-lg hidden items-center justify-center text-white font-bold">🕉️</div>
+         
+         {/* TITLE: UPDATED TO SERIF & MAROON */}
+         <h1 className="font-serif font-bold text-orange-900 text-lg tracking-wide">Sri Venkateswara Swamy Temple</h1>
       </div>
 
       <div className="p-4 max-w-md mx-auto min-h-screen">
