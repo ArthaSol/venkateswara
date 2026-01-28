@@ -22,11 +22,31 @@ const formatCurrencyIN = (amount) => {
   return otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + lastThree;
 };
 
+// HELPER: Fix Excel Dates (e.g., 45321 -> 2026-01-27)
+const parseExcelDate = (input) => {
+  if (!input) return new Date().toISOString().split('T')[0];
+  if (typeof input === 'number') {
+    const date = new Date(Math.round((input - 25569) * 86400 * 1000));
+    return date.toISOString().split('T')[0];
+  }
+  const str = String(input).trim();
+  // Try to match DD-MM-YYYY or DD/MM/YYYY
+  const parts = str.match(/(\d{1,2})[\.\/\-](\d{1,2})[\.\/\-](\d{2,4})/);
+  if (parts) {
+    let day = parts[1].padStart(2, '0');
+    let month = parts[2].padStart(2, '0');
+    let year = parts[3];
+    if (year.length === 2) year = "20" + year;
+    return `${year}-${month}-${day}`; 
+  }
+  return new Date().toISOString().split('T')[0];
+};
+
 const triggerHaptic = async () => {
   try { await Haptics.impact({ style: ImpactStyle.Medium }); } catch (e) { console.log('Haptics not available'); }
 };
 
-// --- ICONS (Inline SVGs for Professional Look) ---
+// --- ICONS ---
 const Icons = {
   Home: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>,
   List: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>,
@@ -185,10 +205,9 @@ function App() {
       await db.run("INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)", [date, donor_name, finalAmount, 'CREDIT', denomination, sl_no, receipt_no]);
     }
     
-    triggerHaptic(); // Vibrate on Success
+    triggerHaptic();
     setFormMode(null);
     refreshData();
-    // Optional: Show Toast here
   };
 
   const handleDelete = async (id) => {
@@ -199,7 +218,7 @@ function App() {
     }
   };
 
-  // --- REPORT GENERATION LOGIC ---
+  // --- REPORT GENERATION ---
   const handleExportBackup = async () => {
     try {
         const wb = XLSX.utils.book_new();
@@ -231,9 +250,66 @@ function App() {
     } catch (error) { alert("PDF Error: " + error.message); }
   };
 
+  // --- FILE UPLOAD (RESTORED LOGIC) ---
   const handleFileUpload = (e) => {
-    // Re-use logic from previous step if needed for Import
-    alert("Import feature available in previous version. Re-enable if needed.");
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    
+    reader.onload = async (evt) => {
+      try {
+          const bstr = evt.target.result;
+          const wb = XLSX.read(bstr, { type: 'binary' });
+          const db = await getDB();
+          let count = 0;
+          
+          for (const sheetName of wb.SheetNames) {
+            const cleanSheetName = sheetName.replace(/,/g, '').trim();
+            const sheetDenomFallback = parseInt(cleanSheetName);
+            const ws = wb.Sheets[sheetName];
+            const data = XLSX.utils.sheet_to_json(ws);
+            
+            for (const row of data) {
+              const sl = row['Sl No'] || row['Sl.No'] || row['Sl. No'];
+              const rcpt = row['Receipt No'] || row['Receipt no'] || 'Pending';
+              const name = row['Name & Address'] || row.Name || "To be updated"; 
+              const rawDate = row.Date; 
+              const date = parseExcelDate(rawDate);
+
+              let finalDenom = 0;
+              if (row['Denomination']) {
+                 finalDenom = parseInt(row['Denomination']);
+              } else if (!isNaN(sheetDenomFallback)) {
+                 finalDenom = sheetDenomFallback;
+              }
+
+              if (!finalDenom || finalDenom === 0) continue;
+
+              let finalAmount = 0;
+              let hasAmountInExcel = false;
+              if (row.Amount !== undefined) {
+                 const cleanAmt = String(row.Amount).replace(/,/g, '');
+                 const parsed = parseFloat(cleanAmt);
+                 if (parsed > 0) { finalAmount = parsed; hasAmountInExcel = true; }
+              }
+              if (!hasAmountInExcel && sl) { finalAmount = finalDenom; }
+              if (!sl && !hasAmountInExcel) continue;
+              
+              if (finalAmount > 0) {
+                await db.run(`INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
+                  [date, name, finalAmount, 'CREDIT', finalDenom, sl || 'Pending', rcpt]);
+                count++;
+              }
+            }
+          }
+          triggerHaptic();
+          alert(`Success! Imported ${count} receipts.`);
+          refreshData();
+      } catch(err) {
+          alert("Import Error: " + err.message);
+      }
+    };
+    reader.readAsBinaryString(file);
   };
 
   // --- SCREEN: HOME ---
@@ -368,8 +444,8 @@ function App() {
 
   return (
     <div className="min-h-screen bg-orange-50 font-sans text-gray-900">
-      {/* HEADER (Sticky) */}
-      <div className="sticky top-0 bg-white/80 backdrop-blur-md z-20 px-4 py-3 border-b border-orange-100 flex items-center gap-3">
+      {/* HEADER (Sticky with Safe Area Padding) */}
+      <div className="sticky top-0 bg-white/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b border-orange-100 flex items-center gap-3 shadow-sm">
          <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center text-white font-bold">🕉️</div>
          <h1 className="font-bold text-gray-800 text-lg">Sri Venkateswara Swamy Temple</h1>
       </div>
@@ -381,14 +457,14 @@ function App() {
         {activeTab === 'reports' && <ReportsScreen />}
       </div>
 
-      {/* FAB (Floating Add Button) - Only on Home/Ledger */}
+      {/* FAB (Floating Add Button) */}
       {activeTab !== 'reports' && (
         <button onClick={openAdd} className="fixed bottom-24 right-6 w-16 h-16 bg-orange-600 rounded-full text-white shadow-2xl flex items-center justify-center hover:bg-orange-700 active:scale-90 transition-transform z-30">
            <Icons.Plus />
         </button>
       )}
 
-      {/* BOTTOM NAVIGATION (Fixed) */}
+      {/* BOTTOM NAVIGATION */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe pt-2 px-6 flex justify-between items-center z-40 h-20 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
          <button onClick={()=>{triggerHaptic(); setActiveTab('home')}} className={`flex flex-col items-center gap-1 w-16 ${activeTab==='home' ? 'text-orange-600' : 'text-gray-400'}`}>
             <Icons.Home />
