@@ -12,11 +12,11 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Setup Java 17
+    - name: Setup Java 21            # Update the name (optional but good for clarity)
       uses: actions/setup-java@v4
       with:
         distribution: 'zulu'
-        java-version: '17'
+        java-version: '21'           # <--- CHANGE THIS FROM '17' TO '21'
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
