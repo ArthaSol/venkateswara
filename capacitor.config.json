@@ -1,6 +1,6 @@
 {
   "appId": "com.temple.manager",
-  "appName": "TempleManager",
+  "appName": "శ్రీనివాసం",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

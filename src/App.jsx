@@ -77,6 +77,28 @@ const Toast = ({ show, message, type }) => {
 };
 
 // ==========================================
+// DANGER SHEET (DELETE CONFIRMATION) - New
+// ==========================================
+const DangerSheet = ({ isOpen, onClose, onConfirm }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+       <div className="w-full bg-white rounded-t-2xl p-6 animate-slide-up shadow-2xl">
+          <div className="flex flex-col items-center gap-4 text-center">
+             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-3xl">🗑️</div>
+             <h3 className="text-xl font-bold text-gray-800">Delete Receipt?</h3>
+             <p className="text-gray-500 text-sm">This action cannot be undone. The record will be permanently removed.</p>
+             <div className="w-full flex gap-3 mt-2">
+                <button onClick={onClose} className="flex-1 py-4 bg-gray-100 text-gray-700 font-bold rounded-xl active:scale-95 transition-transform">Cancel</button>
+                <button onClick={onConfirm} className="flex-1 py-4 bg-red-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform">Delete</button>
+             </div>
+          </div>
+       </div>
+    </div>
+  );
+};
+
+// ==========================================
 // COMPONENT: HOME SCREEN
 // ==========================================
 const HomeScreen = ({ totalFund, todayTotal, donations }) => (
@@ -273,7 +295,7 @@ const TransactionSheet = ({ formMode, formData, setFormData, setFormMode, handle
           </div>
           <div>
             <label className="text-xs font-bold text-gray-500 uppercase">Date</label>
-            <input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className="w-full border-2 border-gray-200 p-3 rounded-xl font-medium"/>
+            <input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className="w-full border-2 border-gray-100 p-3 rounded-xl font-medium"/>
           </div>
           <button type="submit" className="w-full bg-gradient-to-r from-orange-600 to-amber-500 text-white py-4 rounded-xl font-black text-xl shadow-lg active:scale-95 transition-transform mt-4">
             {isAdd ? 'SAVE RECEIPT' : 'UPDATE RECEIPT'}
@@ -296,6 +318,9 @@ function App() {
   // Toast State
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   
+  // Delete Sheet State
+  const [deleteConfirmationId, setDeleteConfirmationId] = useState(null);
+
   const [formMode, setFormMode] = useState(null);
   const [formData, setFormData] = useState({ id: null, donor_name: '', denomination: '100', amount: '100', sl_no: '', receipt_no: '', date: '' });
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
@@ -355,13 +380,19 @@ function App() {
     refreshData();
   };
 
-  const handleDelete = async (id) => {
+  // --- NEW DELETE LOGIC (Opens Sheet instead of Popup) ---
+  const handleRequestDelete = (id) => {
     triggerHaptic();
-    if (window.confirm("Delete this receipt permanently?")) {
-      await deleteDonation(id);
-      showToast('Receipt Deleted', 'error');
-      refreshData();
-    }
+    setDeleteConfirmationId(id);
+  };
+
+  const executeDelete = async () => {
+    if (!deleteConfirmationId) return;
+    await deleteDonation(deleteConfirmationId);
+    triggerHaptic();
+    showToast('Receipt Deleted', 'error');
+    setDeleteConfirmationId(null);
+    refreshData();
   };
 
   const handleGeneratePDF = async (denom, startDate, endDate) => {
@@ -486,7 +517,7 @@ function App() {
     <div className="min-h-screen bg-orange-50 font-sans text-gray-900">
       <Toast show={toast.show} message={toast.message} type={toast.type} />
 
-      {/* HEADER: UPDATED WITH PONNALA FONT & TEXT */}
+      {/* HEADER: UPDATED ALIGNMENT (Removed mt-1) */}
       <div className="sticky top-0 bg-white/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b border-orange-100 flex items-center gap-3 shadow-sm">
          <img 
            src="/logo.png" 
@@ -496,9 +527,8 @@ function App() {
          />
          <div className="w-8 h-8 bg-orange-600 rounded-lg hidden items-center justify-center text-white font-bold">🕉️</div>
          
-         {/* TELUGU TITLE WITH PONNALA FONT */}
-         {/* Added 'Ponnala' directly here */}
-         <h1 style={{ fontFamily: "'Ponnala', serif" }} className="text-3xl font-bold text-orange-900 mt-1">ఓం నమో వేంకటేశాయ</h1>
+         {/* TELUGU TITLE: Perfectly aligned with flex items-center */}
+         <h1 style={{ fontFamily: "'Ponnala', serif" }} className="text-3xl font-bold text-orange-900">ఓం నమో వేంకటేశాయ</h1>
       </div>
 
       <div className="p-4 max-w-md mx-auto min-h-screen">
@@ -507,7 +537,7 @@ function App() {
            <LedgerScreen 
               donations={donations} 
               DENOMINATIONS={DENOMINATIONS} 
-              handleDelete={handleDelete} 
+              handleDelete={handleRequestDelete} // Calls Sheet now
               openEdit={openEdit} 
            />
         )}
@@ -536,6 +566,14 @@ function App() {
       </div>
 
       <TransactionSheet formMode={formMode} formData={formData} setFormData={setFormData} setFormMode={setFormMode} handleSave={handleSave} DENOMINATIONS={DENOMINATIONS}/>
+      
+      {/* NEW DANGER SHEET */}
+      <DangerSheet 
+        isOpen={!!deleteConfirmationId} 
+        onClose={() => setDeleteConfirmationId(null)} 
+        onConfirm={executeDelete} 
+      />
+      
       <ReportFilterSheet isOpen={isReportSheetOpen} onClose={() => setIsReportSheetOpen(false)} DENOMINATIONS={DENOMINATIONS} onGenerate={handleGeneratePDF}/>
     </div>
   );
