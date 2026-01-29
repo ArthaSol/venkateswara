@@ -528,7 +528,8 @@ function App() {
          <div className="w-8 h-8 bg-orange-600 rounded-lg hidden items-center justify-center text-white font-bold">🕉️</div>
          
          {/* TELUGU TITLE: Perfectly aligned with flex items-center */}
-         <h1 style={{ fontFamily: "'Ponnala', serif" }} className="text-3xl font-bold text-orange-900">ఓం నమో వేంకటేశాయ</h1>
+         {/* Added pt-2 to push the floating Telugu text down to the center */}
+<h1 style={{ fontFamily: "'Ponnala', serif" }} className="text-3xl font-bold text-orange-900 pt-2">ఓం నమో వేంకటేశాయ</h1>
       </div>
 
       <div className="p-4 max-w-md mx-auto min-h-screen">
