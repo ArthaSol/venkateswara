@@ -62,15 +62,13 @@ const Icons = {
 };
 
 // ==========================================
-// TOAST NOTIFICATION (RE-DESIGNED: BOTTOM & GLASS)
+// TOAST NOTIFICATION
 // ==========================================
 const Toast = ({ show, message, type }) => {
   if (!show) return null;
-  // Green border for success, Red for error. White background with Blur.
   const borderClass = type === 'error' ? 'border-red-500 text-red-700' : 'border-green-500 text-green-800';
   
   return (
-    // Moved to BOTTOM-24 (Just above nav bar)
     <div className={`fixed bottom-24 left-4 right-4 z-[100] flex items-center gap-3 px-6 py-4 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] bg-white/95 backdrop-blur-md border-l-8 ${borderClass} animate-slide-up`}>
       <span className="text-xl">{type === 'error' ? '⚠️' : '✅'}</span>
       <span className="font-bold text-sm tracking-wide">{message}</span>
@@ -488,19 +486,19 @@ function App() {
     <div className="min-h-screen bg-orange-50 font-sans text-gray-900">
       <Toast show={toast.show} message={toast.message} type={toast.type} />
 
-      {/* HEADER: UPDATED WITH CUSTOM LOGO & SERIF FONT */}
+      {/* HEADER: UPDATED WITH PONNALA FONT & TEXT */}
       <div className="sticky top-0 bg-white/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b border-orange-100 flex items-center gap-3 shadow-sm">
-         {/* CUSTOM LOGO: Place 'logo.png' in public folder. If missing, it falls back to 🕉️ */}
          <img 
            src="/logo.png" 
            alt="Logo"
            onError={(e) => {e.target.style.display='none'; e.target.nextSibling.style.display='flex'}}
-           className="w-10 h-10 object-contain"
+           className="w-12 h-12 object-contain rounded-full border border-orange-200"
          />
          <div className="w-8 h-8 bg-orange-600 rounded-lg hidden items-center justify-center text-white font-bold">🕉️</div>
          
-         {/* TITLE: UPDATED TO SERIF & MAROON */}
-         <h1 className="font-serif font-bold text-orange-900 text-lg tracking-wide">Sri Venkateswara Swamy Temple</h1>
+         {/* TELUGU TITLE WITH PONNALA FONT */}
+         {/* Added 'Ponnala' directly here */}
+         <h1 style={{ fontFamily: "'Ponnala', serif" }} className="text-3xl font-bold text-orange-900 mt-1">ఓం నమో వేంకటేశాయ</h1>
       </div>
 
       <div className="p-4 max-w-md mx-auto min-h-screen">
