@@ -5,6 +5,11 @@ import { generatePDFData } from './pdfGenerator';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { Browser } from '@capacitor/browser'; 
+
+// --- APP VERSION CONTROL ---
+const APP_VERSION = "1.2"; // Updated to match your new release
+const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/ArthaSol/venkateswara/main/version.json";
 
 // --- UTILS ---
 const getTodayStr = () => {
@@ -59,6 +64,7 @@ const Icons = {
   Edit: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
   Trash: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
   Plus: () => <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>,
+  Update: () => <svg className="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
 };
 
 // ==========================================
@@ -77,7 +83,7 @@ const Toast = ({ show, message, type }) => {
 };
 
 // ==========================================
-// DANGER SHEET (DELETE CONFIRMATION) - New
+// DANGER SHEET (DELETE CONFIRMATION)
 // ==========================================
 const DangerSheet = ({ isOpen, onClose, onConfirm }) => {
   if (!isOpen) return null;
@@ -91,6 +97,43 @@ const DangerSheet = ({ isOpen, onClose, onConfirm }) => {
              <div className="w-full flex gap-3 mt-2">
                 <button onClick={onClose} className="flex-1 py-4 bg-gray-100 text-gray-700 font-bold rounded-xl active:scale-95 transition-transform">Cancel</button>
                 <button onClick={onConfirm} className="flex-1 py-4 bg-red-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform">Delete</button>
+             </div>
+          </div>
+       </div>
+    </div>
+  );
+};
+
+// ==========================================
+// UPDATE SHEET (NEW VERSION AVAILABLE)
+// ==========================================
+const UpdateSheet = ({ updateInfo, onClose }) => {
+  if (!updateInfo) return null;
+
+  const handleUpdate = async () => {
+    // Open the download URL in the system browser
+    await Browser.open({ url: updateInfo.downloadUrl });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+       <div className="w-full bg-white rounded-t-2xl p-6 animate-slide-up shadow-2xl border-t-4 border-blue-500">
+          <div className="flex flex-col items-center gap-4 text-center">
+             <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-2">
+                <Icons.Update />
+             </div>
+             <div>
+                <h3 className="text-2xl font-black text-gray-800">New Version Available!</h3>
+                <p className="text-blue-600 font-bold mt-1">v{updateInfo.version}</p>
+             </div>
+             <p className="text-gray-500 text-sm px-4">
+                A newer, faster version of Srinivasam is ready. Please update to get the latest features.
+             </p>
+             <div className="w-full flex gap-3 mt-4">
+                <button onClick={onClose} className="flex-1 py-4 bg-gray-100 text-gray-500 font-bold rounded-xl active:scale-95 transition-transform">Later</button>
+                <button onClick={handleUpdate} className="flex-[2] py-4 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-200 active:scale-95 transition-transform">
+                   Update Now
+                </button>
              </div>
           </div>
        </div>
@@ -318,8 +361,9 @@ function App() {
   // Toast State
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   
-  // Delete Sheet State
+  // Sheet States
   const [deleteConfirmationId, setDeleteConfirmationId] = useState(null);
+  const [updateAvailable, setUpdateAvailable] = useState(null); // Holds update info { version, downloadUrl }
 
   const [formMode, setFormMode] = useState(null);
   const [formData, setFormData] = useState({ id: null, donor_name: '', denomination: '100', amount: '100', sl_no: '', receipt_no: '', date: '' });
@@ -330,7 +374,28 @@ function App() {
   useEffect(() => {
     const setup = async () => { try { await initDB(); refreshData(); } catch (e) { console.error("DB Error:", e); } };
     setup();
+    checkForUpdates(); // Check for updates on app launch
   }, []);
+
+  // --- UPDATE CHECKER LOGIC ---
+  const checkForUpdates = async () => {
+    try {
+      // 1. Fetch the version.json from GitHub
+      const response = await fetch(UPDATE_CHECK_URL);
+      if (!response.ok) return; // If offline or error, do nothing
+      
+      const data = await response.json();
+      
+      // 2. Compare Versions (Simple comparison for now)
+      // If the cloud version is different than local APP_VERSION
+      if (data.version !== APP_VERSION) {
+         // Optionally check if data.version > APP_VERSION logic if using semver
+         setUpdateAvailable(data);
+      }
+    } catch (e) {
+      console.log("Update check skipped (Offline?)");
+    }
+  };
 
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
@@ -380,7 +445,6 @@ function App() {
     refreshData();
   };
 
-  // --- NEW DELETE LOGIC (Opens Sheet instead of Popup) ---
   const handleRequestDelete = (id) => {
     triggerHaptic();
     setDeleteConfirmationId(id);
@@ -517,7 +581,7 @@ function App() {
     <div className="min-h-screen bg-orange-50 font-sans text-gray-900">
       <Toast show={toast.show} message={toast.message} type={toast.type} />
 
-      {/* HEADER: UPDATED ALIGNMENT (Removed mt-1) */}
+      {/* HEADER: PT-2 APPLIED FOR ALIGNMENT */}
       <div className="sticky top-0 bg-white/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b border-orange-100 flex items-center gap-3 shadow-sm">
          <img 
            src="/logo.png" 
@@ -526,10 +590,7 @@ function App() {
            className="w-12 h-12 object-contain rounded-full border border-orange-200"
          />
          <div className="w-8 h-8 bg-orange-600 rounded-lg hidden items-center justify-center text-white font-bold">🕉️</div>
-         
-         {/* TELUGU TITLE: Perfectly aligned with flex items-center */}
-         {/* Added pt-2 to push the floating Telugu text down to the center */}
-<h1 style={{ fontFamily: "'Ponnala', serif" }} className="text-3xl font-bold text-orange-900 pt-2">ఓం నమో వేంకటేశాయ</h1>
+         <h1 style={{ fontFamily: "'Ponnala', serif" }} className="text-3xl font-bold text-orange-900 pt-2">ఓం నమో వేంకటేశాయ</h1>
       </div>
 
       <div className="p-4 max-w-md mx-auto min-h-screen">
@@ -538,7 +599,7 @@ function App() {
            <LedgerScreen 
               donations={donations} 
               DENOMINATIONS={DENOMINATIONS} 
-              handleDelete={handleRequestDelete} // Calls Sheet now
+              handleDelete={handleRequestDelete} 
               openEdit={openEdit} 
            />
         )}
@@ -567,13 +628,10 @@ function App() {
       </div>
 
       <TransactionSheet formMode={formMode} formData={formData} setFormData={setFormData} setFormMode={setFormMode} handleSave={handleSave} DENOMINATIONS={DENOMINATIONS}/>
+      <DangerSheet isOpen={!!deleteConfirmationId} onClose={() => setDeleteConfirmationId(null)} onConfirm={executeDelete} />
       
-      {/* NEW DANGER SHEET */}
-      <DangerSheet 
-        isOpen={!!deleteConfirmationId} 
-        onClose={() => setDeleteConfirmationId(null)} 
-        onConfirm={executeDelete} 
-      />
+      {/* NEW UPDATE SHEET */}
+      <UpdateSheet updateInfo={updateAvailable} onClose={() => setUpdateAvailable(null)} />
       
       <ReportFilterSheet isOpen={isReportSheetOpen} onClose={() => setIsReportSheetOpen(false)} DENOMINATIONS={DENOMINATIONS} onGenerate={handleGeneratePDF}/>
     </div>
