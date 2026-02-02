@@ -8,8 +8,35 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Browser } from '@capacitor/browser'; 
 
 // --- APP VERSION CONTROL ---
-const APP_VERSION = "1.2"; // Updated to match your new release
+const APP_VERSION = "1.3"; 
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/ArthaSol/venkateswara/main/version.json";
+
+// --- THEME ENGINE ---
+// We use CSS variables to swap colors instantly without rewriting code
+const THEMES = {
+  mangalam: {
+    name: 'Mangalam',
+    bg: 'bg-orange-50',
+    cardGradient: 'from-orange-600 to-amber-500',
+    textPrimary: 'text-gray-900',
+    textSecondary: 'text-gray-500',
+    accent: 'text-orange-600',
+    border: 'border-orange-100',
+    inputBg: 'bg-white',
+    fab: 'bg-orange-600'
+  },
+  ekantam: {
+    name: 'Ekantam',
+    bg: 'bg-slate-900',
+    cardGradient: 'from-slate-800 to-slate-700',
+    textPrimary: 'text-slate-100',
+    textSecondary: 'text-slate-400',
+    accent: 'text-amber-400',
+    border: 'border-slate-800',
+    inputBg: 'bg-slate-800',
+    fab: 'bg-amber-500'
+  }
+};
 
 // --- UTILS ---
 const getTodayStr = () => {
@@ -83,7 +110,7 @@ const Toast = ({ show, message, type }) => {
 };
 
 // ==========================================
-// DANGER SHEET (DELETE CONFIRMATION)
+// DANGER SHEET
 // ==========================================
 const DangerSheet = ({ isOpen, onClose, onConfirm }) => {
   if (!isOpen) return null;
@@ -93,10 +120,9 @@ const DangerSheet = ({ isOpen, onClose, onConfirm }) => {
           <div className="flex flex-col items-center gap-4 text-center">
              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-3xl">🗑️</div>
              <h3 className="text-xl font-bold text-gray-800">Delete Receipt?</h3>
-             <p className="text-gray-500 text-sm">This action cannot be undone. The record will be permanently removed.</p>
              <div className="w-full flex gap-3 mt-2">
-                <button onClick={onClose} className="flex-1 py-4 bg-gray-100 text-gray-700 font-bold rounded-xl active:scale-95 transition-transform">Cancel</button>
-                <button onClick={onConfirm} className="flex-1 py-4 bg-red-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform">Delete</button>
+                <button onClick={onClose} className="flex-1 py-4 bg-gray-100 text-gray-700 font-bold rounded-xl">Cancel</button>
+                <button onClick={onConfirm} className="flex-1 py-4 bg-red-600 text-white font-bold rounded-xl shadow-lg">Delete</button>
              </div>
           </div>
        </div>
@@ -105,16 +131,10 @@ const DangerSheet = ({ isOpen, onClose, onConfirm }) => {
 };
 
 // ==========================================
-// UPDATE SHEET (NEW VERSION AVAILABLE)
+// UPDATE SHEET
 // ==========================================
 const UpdateSheet = ({ updateInfo, onClose }) => {
   if (!updateInfo) return null;
-
-  const handleUpdate = async () => {
-    // Open the download URL in the system browser
-    await Browser.open({ url: updateInfo.downloadUrl });
-  };
-
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
        <div className="w-full bg-white rounded-t-2xl p-6 animate-slide-up shadow-2xl border-t-4 border-blue-500">
@@ -126,14 +146,9 @@ const UpdateSheet = ({ updateInfo, onClose }) => {
                 <h3 className="text-2xl font-black text-gray-800">New Version Available!</h3>
                 <p className="text-blue-600 font-bold mt-1">v{updateInfo.version}</p>
              </div>
-             <p className="text-gray-500 text-sm px-4">
-                A newer, faster version of Srinivasam is ready. Please update to get the latest features.
-             </p>
              <div className="w-full flex gap-3 mt-4">
-                <button onClick={onClose} className="flex-1 py-4 bg-gray-100 text-gray-500 font-bold rounded-xl active:scale-95 transition-transform">Later</button>
-                <button onClick={handleUpdate} className="flex-[2] py-4 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-200 active:scale-95 transition-transform">
-                   Update Now
-                </button>
+                <button onClick={onClose} className="flex-1 py-4 bg-gray-100 text-gray-500 font-bold rounded-xl">Later</button>
+                <button onClick={() => Browser.open({ url: updateInfo.downloadUrl })} className="flex-[2] py-4 bg-blue-600 text-white font-bold rounded-xl shadow-lg">Update Now</button>
              </div>
           </div>
        </div>
@@ -142,11 +157,11 @@ const UpdateSheet = ({ updateInfo, onClose }) => {
 };
 
 // ==========================================
-// COMPONENT: HOME SCREEN
+// COMPONENT: HOME SCREEN (Compact View)
 // ==========================================
-const HomeScreen = ({ totalFund, todayTotal, donations }) => (
-  <div className="flex flex-col gap-6 pb-24">
-     <div className="relative overflow-hidden bg-gradient-to-br from-orange-600 to-amber-500 rounded-3xl p-6 shadow-xl text-white">
+const HomeScreen = ({ totalFund, todayTotal, donations, currentTheme }) => (
+  <div className="flex flex-col gap-6 pb-32"> {/* Increased padding bottom for FAB safety */}
+     <div className={`relative overflow-hidden bg-gradient-to-br ${currentTheme.cardGradient} rounded-3xl p-6 shadow-xl text-white transition-colors duration-500`}>
         <div className="absolute -right-10 -bottom-10 opacity-10 text-9xl">🕉️</div>
         <p className="text-orange-100 text-sm font-medium tracking-widest uppercase">Total Temple Fund</p>
         <h1 className="text-4xl font-black mt-2 mb-1">₹ {formatCurrencyIN(totalFund)}</h1>
@@ -157,26 +172,26 @@ const HomeScreen = ({ totalFund, todayTotal, donations }) => (
      </div>
 
      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-orange-50">
-           <p className="text-gray-400 text-xs font-bold uppercase">Today</p>
-           <p className="text-2xl font-bold text-gray-800">₹ {formatCurrencyIN(todayTotal)}</p>
+        <div className={`${currentTheme.inputBg} p-4 rounded-2xl shadow-sm border ${currentTheme.border}`}>
+           <p className={`${currentTheme.textSecondary} text-xs font-bold uppercase`}>Today</p>
+           <p className={`text-2xl font-bold ${currentTheme.textPrimary}`}>₹ {formatCurrencyIN(todayTotal)}</p>
         </div>
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-orange-50">
-           <p className="text-gray-400 text-xs font-bold uppercase">Reciepts</p>
-           <p className="text-2xl font-bold text-gray-800">{donations.length}</p>
+        <div className={`${currentTheme.inputBg} p-4 rounded-2xl shadow-sm border ${currentTheme.border}`}>
+           <p className={`${currentTheme.textSecondary} text-xs font-bold uppercase`}>Receipts</p>
+           <p className={`text-2xl font-bold ${currentTheme.textPrimary}`}>{donations.length}</p>
         </div>
      </div>
 
      <div>
-       <h3 className="text-gray-500 font-bold text-sm mb-3 ml-2 uppercase tracking-wide">Recent Entries</h3>
+       <h3 className={`${currentTheme.textSecondary} font-bold text-sm mb-3 ml-2 uppercase tracking-wide`}>Recent Entries</h3>
        <div className="flex flex-col gap-3">
-         {donations.slice(0, 3).map(item => (
-           <div key={item.id} className="bg-white p-4 rounded-xl border border-gray-100 flex justify-between items-center shadow-sm">
-              <div>
-                 <p className="font-bold text-gray-800 truncate w-48">{item.donor_name}</p>
-                 <p className="text-xs text-gray-400">{formatDateIN(item.date)}</p>
+         {donations.slice(0, 5).map(item => (
+           <div key={item.id} className={`${currentTheme.inputBg} p-4 rounded-xl border ${currentTheme.border} flex justify-between items-center shadow-sm`}>
+              <div className="flex-1 min-w-0 pr-4">
+                 <p className={`font-bold ${currentTheme.textPrimary} truncate`}>{item.donor_name}</p>
+                 <p className={`text-xs ${currentTheme.textSecondary}`}>{formatDateIN(item.date)}</p>
               </div>
-              <span className="font-bold text-orange-600">₹{formatCurrencyIN(item.amount)}</span>
+              <span className={`font-bold ${currentTheme.accent} whitespace-nowrap`}>₹ {formatCurrencyIN(item.amount)}</span>
            </div>
          ))}
        </div>
@@ -185,9 +200,9 @@ const HomeScreen = ({ totalFund, todayTotal, donations }) => (
 );
 
 // ==========================================
-// COMPONENT: LEDGER SCREEN
+// COMPONENT: LEDGER SCREEN (Detailed View)
 // ==========================================
-const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit }) => {
+const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, currentTheme }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDenom, setFilterDenom] = useState("");
 
@@ -199,37 +214,37 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit }) => {
   }, [donations, searchTerm, filterDenom]);
 
   return (
-    <div className="flex flex-col h-full pb-24">
-      <div className="sticky top-0 bg-orange-50 pt-2 pb-4 z-10">
+    <div className="flex flex-col h-full pb-32"> {/* Increased padding bottom for FAB safety */}
+      <div className={`sticky top-0 ${currentTheme.bg} pt-2 pb-4 z-10 transition-colors duration-300`}>
          <input 
            type="text" 
            placeholder="Search Name or Receipt No..." 
            value={searchTerm} 
            onChange={e => setSearchTerm(e.target.value)} 
-           className="w-full bg-white border-none shadow-sm p-4 rounded-xl font-medium text-gray-700 outline-none focus:ring-2 focus:ring-orange-200"
+           className={`w-full ${currentTheme.inputBg} ${currentTheme.textPrimary} border-none shadow-sm p-4 rounded-xl font-medium outline-none focus:ring-2 focus:ring-orange-200 placeholder-gray-400`}
          />
          <div className="flex gap-2 mt-3 overflow-x-auto no-scrollbar">
-            <button onClick={()=>setFilterDenom("")} className={`px-4 py-1 rounded-full text-xs font-bold whitespace-nowrap ${filterDenom==="" ? 'bg-orange-600 text-white' : 'bg-white text-gray-500'}`}>All</button>
+            <button onClick={()=>setFilterDenom("")} className={`px-4 py-1 rounded-full text-xs font-bold whitespace-nowrap ${filterDenom==="" ? 'bg-orange-600 text-white' : `${currentTheme.inputBg} ${currentTheme.textSecondary}`}`}>All</button>
             {DENOMINATIONS.map(d => (
-               <button key={d} onClick={()=>setFilterDenom(d)} className={`px-4 py-1 rounded-full text-xs font-bold whitespace-nowrap ${filterDenom==d ? 'bg-orange-600 text-white' : 'bg-white text-gray-500'}`}>₹ {d}</button>
+               <button key={d} onClick={()=>setFilterDenom(d)} className={`px-4 py-1 rounded-full text-xs font-bold whitespace-nowrap ${filterDenom==d ? 'bg-orange-600 text-white' : `${currentTheme.inputBg} ${currentTheme.textSecondary}`}`}>₹ {d}</button>
             ))}
          </div>
       </div>
 
       <div className="flex flex-col gap-3">
         {filtered.map(item => (
-          <div key={item.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 relative overflow-hidden group">
+          <div key={item.id} className={`${currentTheme.inputBg} rounded-xl p-4 shadow-sm border ${currentTheme.border} relative overflow-hidden group`}>
              <button onClick={()=>handleDelete(item.id)} className="absolute top-0 right-0 p-3 bg-red-50 text-red-500 rounded-bl-xl opacity-0 group-hover:opacity-100 transition-opacity">
                 <Icons.Trash />
              </button>
              <div className="flex justify-between items-start mb-2 pr-10">
                 <div>
-                  <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded mr-2">#{item.receipt_no}</span>
-                  <h3 className="font-bold text-gray-800 text-lg leading-tight mt-1">{item.donor_name}</h3>
+                  <span className={`text-xs font-bold ${currentTheme.textSecondary} bg-opacity-10 bg-gray-500 px-2 py-0.5 rounded mr-2`}>#{item.receipt_no}</span>
+                  <h3 className={`font-bold ${currentTheme.textPrimary} text-lg leading-tight mt-1`}>{item.donor_name}</h3>
                 </div>
                 <div className="text-right">
-                  <span className="block font-black text-xl text-green-700">₹{formatCurrencyIN(item.amount)}</span>
-                  <span className="text-xs text-gray-400 whitespace-nowrap">{formatDateIN(item.date)}</span>
+                  <span className="block font-black text-xl text-green-600">₹{formatCurrencyIN(item.amount)}</span>
+                  <span className={`text-xs ${currentTheme.textSecondary} whitespace-nowrap`}>{formatDateIN(item.date)}</span>
                 </div>
              </div>
              <button onClick={()=>openEdit(item)} className="w-full mt-2 py-2 bg-blue-50 text-blue-600 font-bold rounded-lg text-sm flex items-center justify-center gap-2 hover:bg-blue-100">
@@ -237,41 +252,6 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit }) => {
              </button>
           </div>
         ))}
-      </div>
-    </div>
-  );
-};
-
-// ==========================================
-// COMPONENT: REPORT FILTER SHEET
-// ==========================================
-const ReportFilterSheet = ({ isOpen, onClose, DENOMINATIONS, onGenerate }) => {
-  if (!isOpen) return null;
-  const [denom, setDenom] = useState("ALL");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-
-  const handleGen = () => {
-    onGenerate(denom, startDate, endDate);
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black bg-opacity-60 backdrop-blur-sm">
-      <div className="w-full bg-white rounded-t-2xl p-6 animate-slide-up shadow-2xl">
-        <h3 className="text-xl font-bold mb-4 text-orange-700">📄 Generate PDF Report</h3>
-        <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Denomination</label>
-        <select value={denom} onChange={(e) => setDenom(e.target.value)} className="w-full border p-3 rounded-xl mb-4 font-bold bg-gray-50">
-          <option value="ALL">All Denominations (Full)</option>
-          {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {formatCurrencyIN(d)}</option>)}
-        </select>
-        <label className="text-xs font-bold text-gray-500 uppercase block mb-2">Date Range (Optional)</label>
-        <div className="flex gap-2 mb-6">
-          <input type="date" className="border p-3 rounded-xl w-full" value={startDate} onChange={e => setStartDate(e.target.value)} />
-          <input type="date" className="border p-3 rounded-xl w-full" value={endDate} onChange={e => setEndDate(e.target.value)} />
-        </div>
-        <button onClick={handleGen} className="w-full bg-orange-600 text-white font-bold py-4 rounded-xl shadow-lg text-lg">Download PDF</button>
-        <button onClick={onClose} className="w-full py-4 text-gray-500 font-bold mt-2">Cancel</button>
       </div>
     </div>
   );
@@ -349,6 +329,33 @@ const TransactionSheet = ({ formMode, formData, setFormData, setFormMode, handle
   );
 };
 
+const ReportFilterSheet = ({ isOpen, onClose, DENOMINATIONS, onGenerate }) => {
+  if (!isOpen) return null;
+  const [denom, setDenom] = useState("ALL");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const handleGen = () => { onGenerate(denom, startDate, endDate); onClose(); };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black bg-opacity-60 backdrop-blur-sm">
+      <div className="w-full bg-white rounded-t-2xl p-6 animate-slide-up shadow-2xl">
+        <h3 className="text-xl font-bold mb-4 text-orange-700">📄 Generate PDF Report</h3>
+        <select value={denom} onChange={(e) => setDenom(e.target.value)} className="w-full border p-3 rounded-xl mb-4 font-bold bg-gray-50">
+          <option value="ALL">All Denominations (Full)</option>
+          {DENOMINATIONS.map(d => <option key={d} value={d}>₹ {formatCurrencyIN(d)}</option>)}
+        </select>
+        <div className="flex gap-2 mb-6">
+          <input type="date" className="border p-3 rounded-xl w-full" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          <input type="date" className="border p-3 rounded-xl w-full" value={endDate} onChange={e => setEndDate(e.target.value)} />
+        </div>
+        <button onClick={handleGen} className="w-full bg-orange-600 text-white font-bold py-4 rounded-xl shadow-lg text-lg">Download PDF</button>
+        <button onClick={onClose} className="w-full py-4 text-gray-500 font-bold mt-2">Cancel</button>
+      </div>
+    </div>
+  );
+};
+
 // ==========================================
 // MAIN APP COMPONENT
 // ==========================================
@@ -358,12 +365,16 @@ function App() {
   const [todayTotal, setTodayTotal] = useState(0);
   const [donations, setDonations] = useState([]);
   
+  // Theme State
+  const [themeMode, setThemeMode] = useState('mangalam'); // Default
+  const currentTheme = THEMES[themeMode];
+
   // Toast State
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   
   // Sheet States
   const [deleteConfirmationId, setDeleteConfirmationId] = useState(null);
-  const [updateAvailable, setUpdateAvailable] = useState(null); // Holds update info { version, downloadUrl }
+  const [updateAvailable, setUpdateAvailable] = useState(null);
 
   const [formMode, setFormMode] = useState(null);
   const [formData, setFormData] = useState({ id: null, donor_name: '', denomination: '100', amount: '100', sl_no: '', receipt_no: '', date: '' });
@@ -374,27 +385,16 @@ function App() {
   useEffect(() => {
     const setup = async () => { try { await initDB(); refreshData(); } catch (e) { console.error("DB Error:", e); } };
     setup();
-    checkForUpdates(); // Check for updates on app launch
+    checkForUpdates();
   }, []);
 
-  // --- UPDATE CHECKER LOGIC ---
   const checkForUpdates = async () => {
     try {
-      // 1. Fetch the version.json from GitHub
       const response = await fetch(UPDATE_CHECK_URL);
-      if (!response.ok) return; // If offline or error, do nothing
-      
+      if (!response.ok) return;
       const data = await response.json();
-      
-      // 2. Compare Versions (Simple comparison for now)
-      // If the cloud version is different than local APP_VERSION
-      if (data.version !== APP_VERSION) {
-         // Optionally check if data.version > APP_VERSION logic if using semver
-         setUpdateAvailable(data);
-      }
-    } catch (e) {
-      console.log("Update check skipped (Offline?)");
-    }
+      if (data.version !== APP_VERSION) setUpdateAvailable(data);
+    } catch (e) { console.log("Offline"); }
   };
 
   const showToast = (message, type = 'success') => {
@@ -445,11 +445,6 @@ function App() {
     refreshData();
   };
 
-  const handleRequestDelete = (id) => {
-    triggerHaptic();
-    setDeleteConfirmationId(id);
-  };
-
   const executeDelete = async () => {
     if (!deleteConfirmationId) return;
     await deleteDonation(deleteConfirmationId);
@@ -481,7 +476,8 @@ function App() {
   };
 
   const handleExportBackup = async () => {
-    try {
+     // (Same export logic as before, abbreviated for space)
+     try {
         const wb = XLSX.utils.book_new();
         const uniqueDenoms = [...new Set(donations.map(d => d.denomination))].sort((a, b) => a - b);
         if (uniqueDenoms.length === 0) { showToast("No data to export!", 'error'); return; }
@@ -500,6 +496,7 @@ function App() {
   };
 
   const handleFileUpload = (e) => {
+    // (Same import logic as before)
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -548,29 +545,28 @@ function App() {
     reader.readAsBinaryString(file);
   };
 
-  // --- SCREEN: REPORTS ---
   const ReportsScreen = () => (
-    <div className="flex flex-col gap-4 pb-24">
-       <h2 className="text-2xl font-bold text-gray-800 px-2">Tools & Reports</h2>
-       <div onClick={() => setIsReportSheetOpen(true)} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4 active:scale-95 transition-transform">
+    <div className="flex flex-col gap-4 pb-32">
+       <h2 className={`text-2xl font-bold ${currentTheme.textPrimary} px-2`}>Tools & Reports</h2>
+       <div onClick={() => setIsReportSheetOpen(true)} className={`${currentTheme.inputBg} p-6 rounded-2xl shadow-sm border ${currentTheme.border} flex items-center gap-4 active:scale-95 transition-transform`}>
           <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-2xl">📄</div>
           <div>
-             <h3 className="font-bold text-gray-800">PDF Report</h3>
-             <p className="text-xs text-gray-500">Generate printable list</p>
+             <h3 className={`font-bold ${currentTheme.textPrimary}`}>PDF Report</h3>
+             <p className={`text-xs ${currentTheme.textSecondary}`}>Generate printable list</p>
           </div>
        </div>
-       <div onClick={handleExportBackup} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4 active:scale-95 transition-transform">
+       <div onClick={handleExportBackup} className={`${currentTheme.inputBg} p-6 rounded-2xl shadow-sm border ${currentTheme.border} flex items-center gap-4 active:scale-95 transition-transform`}>
           <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center text-2xl">📊</div>
           <div>
-             <h3 className="font-bold text-gray-800">Excel Backup</h3>
-             <p className="text-xs text-gray-500">Multi-sheet export (Safe)</p>
+             <h3 className={`font-bold ${currentTheme.textPrimary}`}>Excel Backup</h3>
+             <p className={`text-xs ${currentTheme.textSecondary}`}>Multi-sheet export (Safe)</p>
           </div>
        </div>
-       <label className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4 active:scale-95 transition-transform cursor-pointer">
+       <label className={`${currentTheme.inputBg} p-6 rounded-2xl shadow-sm border ${currentTheme.border} flex items-center gap-4 active:scale-95 transition-transform cursor-pointer`}>
           <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-2xl">📥</div>
           <div>
-             <h3 className="font-bold text-gray-800">Import Data</h3>
-             <p className="text-xs text-gray-500">Restore from Excel file</p>
+             <h3 className={`font-bold ${currentTheme.textPrimary}`}>Import Data</h3>
+             <p className={`text-xs ${currentTheme.textSecondary}`}>Restore from Excel file</p>
           </div>
           <input type="file" accept=".xlsx" onChange={handleFileUpload} className="hidden" />
        </label>
@@ -578,50 +574,59 @@ function App() {
   );
 
   return (
-    <div className="min-h-screen bg-orange-50 font-sans text-gray-900">
+    <div className={`min-h-screen ${currentTheme.bg} font-sans transition-colors duration-500`}>
       <Toast show={toast.show} message={toast.message} type={toast.type} />
 
-      {/* HEADER: PT-2 APPLIED FOR ALIGNMENT */}
-      <div className="sticky top-0 bg-white/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b border-orange-100 flex items-center gap-3 shadow-sm">
-         <img 
-           src="/logo.png" 
-           alt="Logo"
-           onError={(e) => {e.target.style.display='none'; e.target.nextSibling.style.display='flex'}}
-           className="w-12 h-12 object-contain rounded-full border border-orange-200"
-         />
-         <div className="w-8 h-8 bg-orange-600 rounded-lg hidden items-center justify-center text-white font-bold">🕉️</div>
-         <h1 style={{ fontFamily: "'Ponnala', serif" }} className="text-3xl font-bold text-orange-900 pt-2">ఓం నమో వేంకటేశాయ</h1>
+      {/* HEADER: PT-2 APPLIED FOR ALIGNMENT + THEME TOGGLE */}
+      <div className={`sticky top-0 ${currentTheme.inputBg}/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b ${currentTheme.border} flex items-center gap-3 shadow-sm transition-colors duration-500`}>
+         {/* TAP LOGO TO SWITCH THEMES */}
+         <button onClick={() => {
+            triggerHaptic();
+            setThemeMode(prev => prev === 'mangalam' ? 'ekantam' : 'mangalam');
+            showToast(`Theme: ${themeMode === 'mangalam' ? 'Ekantam' : 'Mangalam'}`);
+         }}>
+             <img 
+               src="/logo.png" 
+               alt="Logo"
+               onError={(e) => {e.target.style.display='none'; e.target.nextSibling.style.display='flex'}}
+               className={`w-12 h-12 object-contain rounded-full border ${currentTheme.border}`}
+             />
+             <div className="w-8 h-8 bg-orange-600 rounded-lg hidden items-center justify-center text-white font-bold">🕉️</div>
+         </button>
+         
+         <h1 style={{ fontFamily: "'Ponnala', serif" }} className={`text-3xl font-bold ${currentTheme.textPrimary} pt-2`}>ఓం నమో వేంకటేశాయ</h1>
       </div>
 
       <div className="p-4 max-w-md mx-auto min-h-screen">
-        {activeTab === 'home' && <HomeScreen totalFund={totalFund} todayTotal={todayTotal} donations={donations} />}
+        {activeTab === 'home' && <HomeScreen totalFund={totalFund} todayTotal={todayTotal} donations={donations} currentTheme={currentTheme} />}
         {activeTab === 'ledger' && (
            <LedgerScreen 
               donations={donations} 
               DENOMINATIONS={DENOMINATIONS} 
               handleDelete={handleRequestDelete} 
               openEdit={openEdit} 
+              currentTheme={currentTheme}
            />
         )}
         {activeTab === 'reports' && <ReportsScreen />}
       </div>
 
       {activeTab !== 'reports' && (
-        <button onClick={openAdd} className="fixed bottom-24 right-6 w-16 h-16 bg-orange-600 rounded-full text-white shadow-2xl flex items-center justify-center hover:bg-orange-700 active:scale-90 transition-transform z-30">
+        <button onClick={openAdd} className={`fixed bottom-24 right-6 w-16 h-16 ${currentTheme.fab} rounded-full text-white shadow-2xl flex items-center justify-center hover:opacity-90 active:scale-90 transition-transform z-30`}>
            <Icons.Plus />
         </button>
       )}
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 pb-safe pt-2 px-6 flex justify-between items-center z-40 h-20 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-         <button onClick={()=>{triggerHaptic(); setActiveTab('home')}} className={`flex flex-col items-center gap-1 w-16 ${activeTab==='home' ? 'text-orange-600' : 'text-gray-400'}`}>
+      <div className={`fixed bottom-0 left-0 right-0 ${currentTheme.inputBg} border-t ${currentTheme.border} pb-safe pt-2 px-6 flex justify-between items-center z-40 h-20 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] transition-colors duration-500`}>
+         <button onClick={()=>{triggerHaptic(); setActiveTab('home')}} className={`flex flex-col items-center gap-1 w-16 ${activeTab==='home' ? currentTheme.accent : currentTheme.textSecondary}`}>
             <Icons.Home />
             <span className="text-[10px] font-bold">Home</span>
          </button>
-         <button onClick={()=>{triggerHaptic(); setActiveTab('ledger')}} className={`flex flex-col items-center gap-1 w-16 ${activeTab==='ledger' ? 'text-orange-600' : 'text-gray-400'}`}>
+         <button onClick={()=>{triggerHaptic(); setActiveTab('ledger')}} className={`flex flex-col items-center gap-1 w-16 ${activeTab==='ledger' ? currentTheme.accent : currentTheme.textSecondary}`}>
             <Icons.List />
             <span className="text-[10px] font-bold">Ledger</span>
          </button>
-         <button onClick={()=>{triggerHaptic(); setActiveTab('reports')}} className={`flex flex-col items-center gap-1 w-16 ${activeTab==='reports' ? 'text-orange-600' : 'text-gray-400'}`}>
+         <button onClick={()=>{triggerHaptic(); setActiveTab('reports')}} className={`flex flex-col items-center gap-1 w-16 ${activeTab==='reports' ? currentTheme.accent : currentTheme.textSecondary}`}>
             <Icons.Chart />
             <span className="text-[10px] font-bold">Reports</span>
          </button>
@@ -629,10 +634,7 @@ function App() {
 
       <TransactionSheet formMode={formMode} formData={formData} setFormData={setFormData} setFormMode={setFormMode} handleSave={handleSave} DENOMINATIONS={DENOMINATIONS}/>
       <DangerSheet isOpen={!!deleteConfirmationId} onClose={() => setDeleteConfirmationId(null)} onConfirm={executeDelete} />
-      
-      {/* NEW UPDATE SHEET */}
       <UpdateSheet updateInfo={updateAvailable} onClose={() => setUpdateAvailable(null)} />
-      
       <ReportFilterSheet isOpen={isReportSheetOpen} onClose={() => setIsReportSheetOpen(false)} DENOMINATIONS={DENOMINATIONS} onGenerate={handleGeneratePDF}/>
     </div>
   );
