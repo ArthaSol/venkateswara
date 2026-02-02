@@ -8,7 +8,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Browser } from '@capacitor/browser'; 
 
 // --- APP VERSION CONTROL ---
-const APP_VERSION = "1.4"; // BUMPED TO 1.4
+const APP_VERSION = "1.5"; // BUMPED TO 1.5 (STABILITY RELEASE)
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/ArthaSol/venkateswara/main/version.json";
 
 // --- THEME ENGINE ---
@@ -199,24 +199,42 @@ const HomeScreen = ({ totalFund, todayTotal, donations, currentTheme }) => (
 );
 
 // ==========================================
-// COMPONENT: LEDGER SCREEN (CRASH PROOF)
+// COMPONENT: LEDGER SCREEN (v1.5 CRASH PROOF)
 // ==========================================
 const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, currentTheme }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDenom, setFilterDenom] = useState("");
 
+  // Helper: Safe Date Formatter (Prevents crash if date is invalid)
+  const safeFormatDate = (dateStr) => {
+    if (!dateStr || typeof dateStr !== 'string') return "";
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length !== 3) return dateStr;
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    } catch (e) { return ""; }
+  };
+
   const filtered = useMemo(() => {
     return donations.filter(d => {
-       // --- CRASH FIX: SAFETY ARMOR ---
-       // We force everything to be a String. Even if Excel sends a number or null.
-       const safeName = String(d.donor_name || ""); 
-       const safeReceipt = String(d.receipt_no || "");
-       const term = searchTerm.toLowerCase();
+       try {
+         // LAYER 1: FORCE STRING CONVERSION (Prevents "toLowerCase" crash on Numbers)
+         const safeName = String(d.donor_name || "").toLowerCase(); 
+         const safeReceipt = String(d.receipt_no || "").toLowerCase();
+         const term = (searchTerm || "").toLowerCase();
 
-       const matchesSearch = safeName.toLowerCase().includes(term) || safeReceipt.toLowerCase().includes(term);
-       const matchesDenom = filterDenom ? d.denomination == filterDenom : true;
+         const matchesSearch = safeName.includes(term) || safeReceipt.includes(term);
 
-       return matchesDenom && matchesSearch;
+         // LAYER 2: LOOSE EQUALITY (Handles "100" string vs 100 number)
+         let matchesDenom = true;
+         if (filterDenom !== "") {
+            matchesDenom = d.denomination == filterDenom; 
+         }
+
+         return matchesDenom && matchesSearch;
+       } catch (e) {
+         return false; // If a specific row is totally broken, skip it instead of crashing app
+       }
     });
   }, [donations, searchTerm, filterDenom]);
 
@@ -239,6 +257,14 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
       </div>
 
       <div className="flex flex-col gap-3">
+        {/* EMPTY STATE INDICATOR */}
+        {filtered.length === 0 && (
+           <div className="text-center py-10 opacity-50">
+              <p className="text-4xl">📭</p>
+              <p className={`text-sm ${currentTheme.textSecondary} mt-2`}>No receipts found.</p>
+           </div>
+        )}
+
         {filtered.map(item => (
           <div key={item.id} className={`${currentTheme.inputBg} rounded-xl p-4 shadow-sm border ${currentTheme.border} relative overflow-hidden group`}>
              <button onClick={()=>handleDelete(item.id)} className="absolute top-0 right-0 p-3 bg-red-50 text-red-500 rounded-bl-xl opacity-0 group-hover:opacity-100 transition-opacity">
@@ -247,11 +273,13 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
              <div className="flex justify-between items-start mb-2 pr-10">
                 <div>
                   <span className={`text-xs font-bold ${currentTheme.textSecondary} bg-opacity-10 bg-gray-500 px-2 py-0.5 rounded mr-2`}>#{item.receipt_no}</span>
-                  <h3 className={`font-bold ${currentTheme.textPrimary} text-lg leading-tight mt-1`}>{item.donor_name}</h3>
+                  {/* SAFE RENDER: Checks if name exists */}
+                  <h3 className={`font-bold ${currentTheme.textPrimary} text-lg leading-tight mt-1`}>{item.donor_name || "Unknown"}</h3>
                 </div>
                 <div className="text-right">
                   <span className="block font-black text-xl text-green-600">₹{formatCurrencyIN(item.amount)}</span>
-                  <span className={`text-xs ${currentTheme.textSecondary} whitespace-nowrap`}>{formatDateIN(item.date)}</span>
+                  {/* SAFE DATE RENDER */}
+                  <span className={`text-xs ${currentTheme.textSecondary} whitespace-nowrap`}>{safeFormatDate(item.date)}</span>
                 </div>
              </div>
              <button onClick={()=>openEdit(item)} className="w-full mt-2 py-2 bg-blue-50 text-blue-600 font-bold rounded-lg text-sm flex items-center justify-center gap-2 hover:bg-blue-100">
