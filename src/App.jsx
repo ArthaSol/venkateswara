@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { initDB, getDB, getAllDonations, deleteDonation } from './db/database';
 import { generatePDFData } from './pdfGenerator'; 
@@ -8,8 +8,12 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Browser } from '@capacitor/browser'; 
 
 // --- APP VERSION CONTROL ---
-const APP_VERSION = "1.5"; // STABILITY RELEASE
+const APP_VERSION = "1.6"; // PERFORMANCE RELEASE (Virtual Scrolling)
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/ArthaSol/venkateswara/main/version.json";
+
+// --- CONSTANTS FOR VIRTUAL SCROLLING ---
+const ITEM_HEIGHT = 180; // Fixed height for each card in pixels
+const OVERSCAN = 5;      // Buffer items to render above/below view
 
 // --- THEME ENGINE ---
 const THEMES = {
@@ -199,48 +203,63 @@ const HomeScreen = ({ totalFund, todayTotal, donations, currentTheme }) => (
 );
 
 // ==========================================
-// COMPONENT: LEDGER SCREEN (v1.5 CRASH PROOF)
+// COMPONENT: LEDGER SCREEN (VIRTUALIZED)
 // ==========================================
 const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, currentTheme }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDenom, setFilterDenom] = useState("");
+  const [scrollTop, setScrollTop] = useState(0);
+  const containerRef = useRef(null);
 
-  // Helper: Safe Date Formatter (Prevents crash if date is invalid)
+  // Helper: Safe Date Formatter
   const safeFormatDate = (dateStr) => {
     if (!dateStr || typeof dateStr !== 'string') return "";
     try {
-      const parts = dateStr.split('-');
-      if (parts.length !== 3) return dateStr;
-      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+       const parts = dateStr.split('-');
+       if (parts.length !== 3) return dateStr;
+       return `${parts[2]}-${parts[1]}-${parts[0]}`;
     } catch (e) { return ""; }
   };
 
+  // 1. FILTERING
   const filtered = useMemo(() => {
     return donations.filter(d => {
        try {
-         // LAYER 1: FORCE STRING CONVERSION (Prevents "toLowerCase" crash on Numbers)
          const safeName = String(d.donor_name || "").toLowerCase(); 
          const safeReceipt = String(d.receipt_no || "").toLowerCase();
          const term = (searchTerm || "").toLowerCase();
 
          const matchesSearch = safeName.includes(term) || safeReceipt.includes(term);
-
-         // LAYER 2: LOOSE EQUALITY (Handles "100" string vs 100 number)
+         
          let matchesDenom = true;
          if (filterDenom !== "") {
             matchesDenom = d.denomination == filterDenom; 
          }
-
          return matchesDenom && matchesSearch;
-       } catch (e) {
-         return false; // If a specific row is totally broken, skip it instead of crashing app
-       }
+       } catch (e) { return false; }
     });
   }, [donations, searchTerm, filterDenom]);
 
+  // 2. VIRTUALIZATION MATH
+  const totalHeight = filtered.length * ITEM_HEIGHT;
+  const startIndex = Math.floor(scrollTop / ITEM_HEIGHT);
+  // Render enough items to fill screen + buffer
+  const endIndex = Math.min(
+    filtered.length, 
+    startIndex + Math.ceil((window.innerHeight) / ITEM_HEIGHT) + OVERSCAN
+  );
+  
+  const visibleItems = filtered.slice(startIndex, endIndex);
+  const offsetY = startIndex * ITEM_HEIGHT;
+
+  const onScroll = (e) => {
+    setScrollTop(e.target.scrollTop);
+  };
+
   return (
-    <div className="flex flex-col h-full pb-32">
-      <div className={`sticky top-0 ${currentTheme.bg} pt-2 pb-4 z-10 transition-colors duration-300`}>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* HEADER: FIXED (Does not scroll) */}
+      <div className={`flex-none ${currentTheme.bg} pt-2 pb-4 z-10 transition-colors duration-300`}>
          <input 
            type="text" 
            placeholder="Search Name or Receipt No..." 
@@ -256,37 +275,50 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
          </div>
       </div>
 
-      <div className="flex flex-col gap-3">
-        {/* EMPTY STATE INDICATOR */}
-        {filtered.length === 0 && (
-           <div className="text-center py-10 opacity-50">
-              <p className="text-4xl">📭</p>
-              <p className={`text-sm ${currentTheme.textSecondary} mt-2`}>No receipts found.</p>
-           </div>
-        )}
+      {/* VIRTUAL SCROLL CONTAINER */}
+      <div 
+         className="flex-1 overflow-y-auto relative pb-32" 
+         onScroll={onScroll} 
+         ref={containerRef}
+      >
+        {/* TOTAL HEIGHT PHANTOM CONTAINER */}
+        <div style={{ height: totalHeight, position: 'relative' }}>
+            
+            {/* VISIBLE ITEMS WINDOW */}
+            <div style={{ transform: `translateY(${offsetY}px)`, position: 'absolute', top: 0, left: 0, right: 0 }}>
+                {visibleItems.length === 0 && (
+                   <div className="text-center py-10 opacity-50">
+                      <p className="text-4xl">📭</p>
+                      <p className={`text-sm ${currentTheme.textSecondary} mt-2`}>No receipts found.</p>
+                   </div>
+                )}
 
-        {filtered.map(item => (
-          <div key={item.id} className={`${currentTheme.inputBg} rounded-xl p-4 shadow-sm border ${currentTheme.border} relative overflow-hidden group`}>
-             <button onClick={()=>handleDelete(item.id)} className="absolute top-0 right-0 p-3 bg-red-50 text-red-500 rounded-bl-xl opacity-0 group-hover:opacity-100 transition-opacity">
-                <Icons.Trash />
-             </button>
-             <div className="flex justify-between items-start mb-2 pr-10">
-                <div>
-                  <span className={`text-xs font-bold ${currentTheme.textSecondary} bg-opacity-10 bg-gray-500 px-2 py-0.5 rounded mr-2`}>#{item.receipt_no}</span>
-                  {/* SAFE RENDER: Checks if name exists */}
-                  <h3 className={`font-bold ${currentTheme.textPrimary} text-lg leading-tight mt-1`}>{item.donor_name || "Unknown"}</h3>
-                </div>
-                <div className="text-right">
-                  <span className="block font-black text-xl text-green-600">₹{formatCurrencyIN(item.amount)}</span>
-                  {/* SAFE DATE RENDER */}
-                  <span className={`text-xs ${currentTheme.textSecondary} whitespace-nowrap`}>{safeFormatDate(item.date)}</span>
-                </div>
-             </div>
-             <button onClick={()=>openEdit(item)} className="w-full mt-2 py-2 bg-blue-50 text-blue-600 font-bold rounded-lg text-sm flex items-center justify-center gap-2 hover:bg-blue-100">
-                <Icons.Edit /> Edit Details
-             </button>
-          </div>
-        ))}
+                {visibleItems.map(item => (
+                  <div key={item.id} style={{ height: ITEM_HEIGHT - 12, marginBottom: '12px' }} className={`${currentTheme.inputBg} rounded-xl p-4 shadow-sm border ${currentTheme.border} relative overflow-hidden group flex flex-col justify-between`}>
+                     
+                     <button onClick={()=>handleDelete(item.id)} className="absolute top-0 right-0 p-3 bg-red-50 text-red-500 rounded-bl-xl z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Icons.Trash />
+                     </button>
+                     
+                     <div className="flex justify-between items-start pr-10">
+                        <div className="overflow-hidden">
+                          <span className={`text-xs font-bold ${currentTheme.textSecondary} bg-opacity-10 bg-gray-500 px-2 py-0.5 rounded mr-2 inline-block mb-1`}>#{item.receipt_no}</span>
+                          {/* TRUNCATE LONG NAMES */}
+                          <h3 className={`font-bold ${currentTheme.textPrimary} text-lg leading-tight line-clamp-2`}>{item.donor_name || "Unknown"}</h3>
+                        </div>
+                        <div className="text-right flex-shrink-0 ml-2">
+                          <span className="block font-black text-xl text-green-600">₹{formatCurrencyIN(item.amount)}</span>
+                          <span className={`text-xs ${currentTheme.textSecondary} whitespace-nowrap`}>{safeFormatDate(item.date)}</span>
+                        </div>
+                     </div>
+                     
+                     <button onClick={()=>openEdit(item)} className="w-full mt-2 py-2 bg-blue-50 text-blue-600 font-bold rounded-lg text-sm flex items-center justify-center gap-2 hover:bg-blue-100">
+                        <Icons.Edit /> Edit Details
+                     </button>
+                  </div>
+                ))}
+            </div>
+        </div>
       </div>
     </div>
   );
@@ -462,12 +494,11 @@ function App() {
     setFormMode('EDIT'); 
   };
 
-  // --- MISSING FUNCTION ADDED HERE ---
+  // HANDLER FOR DELETE
   const handleRequestDelete = (id) => {
     setDeleteConfirmationId(id);
     triggerHaptic();
   };
-  // ---------------------------------
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -663,11 +694,11 @@ function App() {
   );
 
   return (
-    <div className={`min-h-screen ${currentTheme.bg} font-sans transition-colors duration-500`}>
+    <div className={`fixed inset-0 ${currentTheme.bg} font-sans transition-colors duration-500 overflow-hidden flex flex-col`}>
       <Toast show={toast.show} message={toast.message} type={toast.type} />
 
       {/* HEADER */}
-      <div className={`sticky top-0 ${currentTheme.inputBg}/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b ${currentTheme.border} flex items-center gap-3 shadow-sm transition-colors duration-500`}>
+      <div className={`flex-none ${currentTheme.inputBg}/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b ${currentTheme.border} flex items-center gap-3 shadow-sm transition-colors duration-500`}>
          <button onClick={() => {
             triggerHaptic();
             setThemeMode(prev => prev === 'mangalam' ? 'ekantam' : 'mangalam');
@@ -685,18 +716,30 @@ function App() {
          <h1 style={{ fontFamily: "'Ponnala', serif" }} className={`text-3xl font-bold ${currentTheme.textPrimary} pt-2`}>ఓం నమో వేంకటేశాయ</h1>
       </div>
 
-      <div className="p-4 max-w-md mx-auto min-h-screen">
-        {activeTab === 'home' && <HomeScreen totalFund={totalFund} todayTotal={todayTotal} donations={donations} currentTheme={currentTheme} />}
-        {activeTab === 'ledger' && (
-           <LedgerScreen 
-              donations={donations} 
-              DENOMINATIONS={DENOMINATIONS} 
-              handleDelete={handleRequestDelete} 
-              openEdit={openEdit} 
-              currentTheme={currentTheme}
-           />
+      <div className="flex-1 overflow-hidden relative w-full max-w-md mx-auto">
+        {activeTab === 'home' && (
+           <div className="h-full overflow-y-auto p-4">
+              <HomeScreen totalFund={totalFund} todayTotal={todayTotal} donations={donations} currentTheme={currentTheme} />
+           </div>
         )}
-        {activeTab === 'reports' && <ReportsScreen />}
+        
+        {activeTab === 'ledger' && (
+           <div className="h-full px-4 flex flex-col">
+               <LedgerScreen 
+                  donations={donations} 
+                  DENOMINATIONS={DENOMINATIONS} 
+                  handleDelete={handleRequestDelete} 
+                  openEdit={openEdit} 
+                  currentTheme={currentTheme}
+               />
+           </div>
+        )}
+
+        {activeTab === 'reports' && (
+           <div className="h-full overflow-y-auto p-4">
+             <ReportsScreen />
+           </div>
+        )}
       </div>
 
       {activeTab !== 'reports' && (
@@ -705,7 +748,7 @@ function App() {
         </button>
       )}
 
-      <div className={`fixed bottom-0 left-0 right-0 ${currentTheme.inputBg} border-t ${currentTheme.border} pb-safe pt-2 px-6 flex justify-between items-center z-40 h-20 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] transition-colors duration-500`}>
+      <div className={`flex-none ${currentTheme.inputBg} border-t ${currentTheme.border} pb-safe pt-2 px-6 flex justify-between items-center z-40 h-20 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] transition-colors duration-500`}>
          <button onClick={()=>{triggerHaptic(); setActiveTab('home')}} className={`flex flex-col items-center gap-1 w-16 ${activeTab==='home' ? currentTheme.accent : currentTheme.textSecondary}`}>
             <Icons.Home />
             <span className="text-[10px] font-bold">Home</span>
