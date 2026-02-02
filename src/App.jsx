@@ -8,7 +8,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Browser } from '@capacitor/browser'; 
 
 // --- APP VERSION CONTROL ---
-const APP_VERSION = "1.5"; // BUMPED TO 1.5 (STABILITY RELEASE)
+const APP_VERSION = "1.5"; // STABILITY RELEASE
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/ArthaSol/venkateswara/main/version.json";
 
 // --- THEME ENGINE ---
@@ -461,6 +461,13 @@ function App() {
     setFormData({ ...item });
     setFormMode('EDIT'); 
   };
+
+  // --- MISSING FUNCTION ADDED HERE ---
+  const handleRequestDelete = (id) => {
+    setDeleteConfirmationId(id);
+    triggerHaptic();
+  };
+  // ---------------------------------
 
   const handleSave = async (e) => {
     e.preventDefault();
