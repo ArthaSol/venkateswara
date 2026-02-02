@@ -8,11 +8,10 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Browser } from '@capacitor/browser'; 
 
 // --- APP VERSION CONTROL ---
-const APP_VERSION = "1.3"; 
+const APP_VERSION = "1.4"; // BUMPED TO 1.4
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/ArthaSol/venkateswara/main/version.json";
 
 // --- THEME ENGINE ---
-// We use CSS variables to swap colors instantly without rewriting code
 const THEMES = {
   mangalam: {
     name: 'Mangalam',
@@ -157,10 +156,10 @@ const UpdateSheet = ({ updateInfo, onClose }) => {
 };
 
 // ==========================================
-// COMPONENT: HOME SCREEN (Compact View)
+// COMPONENT: HOME SCREEN
 // ==========================================
 const HomeScreen = ({ totalFund, todayTotal, donations, currentTheme }) => (
-  <div className="flex flex-col gap-6 pb-32"> {/* Increased padding bottom for FAB safety */}
+  <div className="flex flex-col gap-6 pb-32">
      <div className={`relative overflow-hidden bg-gradient-to-br ${currentTheme.cardGradient} rounded-3xl p-6 shadow-xl text-white transition-colors duration-500`}>
         <div className="absolute -right-10 -bottom-10 opacity-10 text-9xl">🕉️</div>
         <p className="text-orange-100 text-sm font-medium tracking-widest uppercase">Total Temple Fund</p>
@@ -200,21 +199,29 @@ const HomeScreen = ({ totalFund, todayTotal, donations, currentTheme }) => (
 );
 
 // ==========================================
-// COMPONENT: LEDGER SCREEN (Detailed View)
+// COMPONENT: LEDGER SCREEN (CRASH PROOF)
 // ==========================================
 const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, currentTheme }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterDenom, setFilterDenom] = useState("");
 
   const filtered = useMemo(() => {
-    return donations.filter(d => 
-       (filterDenom ? d.denomination == filterDenom : true) && 
-       (d.donor_name.toLowerCase().includes(searchTerm.toLowerCase()) || d.receipt_no.toString().includes(searchTerm))
-    );
+    return donations.filter(d => {
+       // --- CRASH FIX: SAFETY ARMOR ---
+       // We force everything to be a String. Even if Excel sends a number or null.
+       const safeName = String(d.donor_name || ""); 
+       const safeReceipt = String(d.receipt_no || "");
+       const term = searchTerm.toLowerCase();
+
+       const matchesSearch = safeName.toLowerCase().includes(term) || safeReceipt.toLowerCase().includes(term);
+       const matchesDenom = filterDenom ? d.denomination == filterDenom : true;
+
+       return matchesDenom && matchesSearch;
+    });
   }, [donations, searchTerm, filterDenom]);
 
   return (
-    <div className="flex flex-col h-full pb-32"> {/* Increased padding bottom for FAB safety */}
+    <div className="flex flex-col h-full pb-32">
       <div className={`sticky top-0 ${currentTheme.bg} pt-2 pb-4 z-10 transition-colors duration-300`}>
          <input 
            type="text" 
@@ -476,7 +483,6 @@ function App() {
   };
 
   const handleExportBackup = async () => {
-     // (Same export logic as before, abbreviated for space)
      try {
         const wb = XLSX.utils.book_new();
         const uniqueDenoms = [...new Set(donations.map(d => d.denomination))].sort((a, b) => a - b);
@@ -495,51 +501,99 @@ function App() {
     } catch (error) { showToast("Export Failed", 'error'); }
   };
 
+  // --- SMART IMPORT LOGIC ---
   const handleFileUpload = (e) => {
-    // (Same import logic as before)
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
+    
     reader.onload = async (evt) => {
       try {
           const bstr = evt.target.result;
           const wb = XLSX.read(bstr, { type: 'binary' });
           const db = await getDB();
           let count = 0;
+
+          // HELPER: Normalize keys to find matches easily
+          const normalize = (str) => String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
+
           for (const sheetName of wb.SheetNames) {
             const cleanSheetName = sheetName.replace(/,/g, '').trim();
             const sheetDenomFallback = parseInt(cleanSheetName);
             const ws = wb.Sheets[sheetName];
-            const data = XLSX.utils.sheet_to_json(ws);
-            for (const row of data) {
-              const sl = row['Sl No'] || row['Sl.No'] || row['Sl. No'];
-              const rcpt = row['Receipt No'] || row['Receipt no'] || 'Pending';
-              const name = row['Name & Address'] || row.Name || "To be updated"; 
-              const rawDate = row.Date; 
-              const date = parseExcelDate(rawDate);
-              let finalDenom = 0;
-              if (row['Denomination']) finalDenom = parseInt(row['Denomination']);
-              else if (!isNaN(sheetDenomFallback)) finalDenom = sheetDenomFallback;
-              if (!finalDenom || finalDenom === 0) continue;
-              let finalAmount = 0;
-              let hasAmountInExcel = false;
-              if (row.Amount !== undefined) {
-                 const cleanAmt = String(row.Amount).replace(/,/g, '');
-                 const parsed = parseFloat(cleanAmt);
-                 if (parsed > 0) { finalAmount = parsed; hasAmountInExcel = true; }
-              }
-              if (!hasAmountInExcel && sl) { finalAmount = finalDenom; }
-              if (!sl && !hasAmountInExcel) continue;
-              if (finalAmount > 0) {
-                await db.run(`INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
-                  [date, name, finalAmount, 'CREDIT', finalDenom, sl || 'Pending', rcpt]);
-                count++;
-              }
+            
+            // Convert sheet to JSON array of arrays (header: 1) to find the header row manually
+            const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+            if (!rawData || rawData.length === 0) continue;
+
+            // 1. Find the Header Row (Look for a row containing "slno" or "receiptno")
+            let headerRowIndex = 0;
+            let headers = [];
+            
+            for (let i = 0; i < Math.min(rawData.length, 10); i++) {
+                const row = rawData[i].map(cell => normalize(cell)); // Normalize this row
+                if (row.includes('slno') || row.includes('receiptno') || row.includes('name')) {
+                    headerRowIndex = i;
+                    headers = row; // Store the normalized headers
+                    break;
+                }
+            }
+
+            // 2. Process Data Rows (Starting after the header)
+            for (let i = headerRowIndex + 1; i < rawData.length; i++) {
+                const row = rawData[i];
+                if (!row || row.length === 0) continue;
+
+                // Map row data using the normalized headers we found
+                const getValue = (keyPart) => {
+                    const idx = headers.findIndex(h => h && h.includes(keyPart));
+                    return idx !== -1 ? row[idx] : null;
+                };
+
+                const sl = getValue('slno');
+                const rcpt = getValue('receiptno') || 'Pending';
+                const name = getValue('name') || getValue('donor') || "To be updated";
+                const rawDate = getValue('date');
+                const date = parseExcelDate(rawDate);
+                
+                // Denomination Logic
+                let finalDenom = 0;
+                const denomVal = getValue('denomination');
+                if (denomVal) finalDenom = parseInt(denomVal);
+                else if (!isNaN(sheetDenomFallback)) finalDenom = sheetDenomFallback;
+
+                if (!finalDenom || finalDenom === 0) continue;
+
+                // Amount Logic
+                let finalAmount = 0;
+                const amtVal = getValue('amount');
+                if (amtVal) {
+                    const cleanAmt = String(amtVal).replace(/,/g, '');
+                    const parsed = parseFloat(cleanAmt);
+                    if (parsed > 0) finalAmount = parsed;
+                }
+                
+                // Fallback: If no amount column, assume Amount = Denomination
+                if (finalAmount === 0 && sl) finalAmount = finalDenom;
+
+                // Final Validation before Insert
+                if (!sl && finalAmount === 0) continue; 
+
+                if (finalAmount > 0) {
+                   await db.run(`INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
+                     [date, name, finalAmount, 'CREDIT', finalDenom, sl || 'Pending', rcpt]);
+                   count++;
+                }
             }
           }
+          
           triggerHaptic();
-          showToast(`Success! Imported ${count} receipts.`);
-          refreshData();
+          if (count === 0) {
+             showToast("Found 0 receipts. Check Excel headers.", 'error');
+          } else {
+             showToast(`Success! Imported ${count} receipts.`);
+             refreshData();
+          }
       } catch(err) { showToast("Import Error: " + err.message, 'error'); }
     };
     reader.readAsBinaryString(file);
@@ -577,9 +631,8 @@ function App() {
     <div className={`min-h-screen ${currentTheme.bg} font-sans transition-colors duration-500`}>
       <Toast show={toast.show} message={toast.message} type={toast.type} />
 
-      {/* HEADER: PT-2 APPLIED FOR ALIGNMENT + THEME TOGGLE */}
+      {/* HEADER */}
       <div className={`sticky top-0 ${currentTheme.inputBg}/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b ${currentTheme.border} flex items-center gap-3 shadow-sm transition-colors duration-500`}>
-         {/* TAP LOGO TO SWITCH THEMES */}
          <button onClick={() => {
             triggerHaptic();
             setThemeMode(prev => prev === 'mangalam' ? 'ekantam' : 'mangalam');
