@@ -8,17 +8,17 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Browser } from '@capacitor/browser'; 
 
 // --- APP VERSION CONTROL ---
-const APP_VERSION = "1.7.2"; // PATCH: Added support for 'RECIEPT' typo
+const APP_VERSION = "1.7.4"; // PATCH: Excel Export with Headers/Titles
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/ArthaSol/venkateswara/main/version.json";
 
-// --- CONSTANTS FOR VIRTUAL SCROLLING ---
-const ITEM_HEIGHT = 180; // Fixed height (Keep this consistent for smooth scrolling)
+// --- CONSTANTS ---
+const ITEM_HEIGHT = 180; 
 const OVERSCAN = 5;      
 
 // --- THEME ENGINE ---
 const THEMES = {
-  mangalam: {
-    name: 'Mangalam',
+  surya: {
+    name: 'Surya (Light)',
     bg: 'bg-orange-50',
     cardGradient: 'from-orange-600 to-amber-500',
     textPrimary: 'text-gray-900',
@@ -28,8 +28,8 @@ const THEMES = {
     inputBg: 'bg-white',
     fab: 'bg-orange-600'
   },
-  ekantam: {
-    name: 'Ekantam',
+  chandra: {
+    name: 'Chandra (Dark)',
     bg: 'bg-slate-900',
     cardGradient: 'from-slate-800 to-slate-700',
     textPrimary: 'text-slate-100',
@@ -63,7 +63,6 @@ const formatCurrencyIN = (amount) => {
   return otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + lastThree;
 };
 
-// HELPER: Fix Excel Dates
 const parseExcelDate = (input) => {
   if (!input) return "2000-01-01"; 
   if (typeof input === 'number') {
@@ -203,7 +202,7 @@ const HomeScreen = ({ totalFund, todayTotal, donations, currentTheme }) => (
 );
 
 // ==========================================
-// COMPONENT: LEDGER SCREEN (VIRTUALIZED)
+// COMPONENT: LEDGER SCREEN
 // ==========================================
 const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, currentTheme }) => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -445,7 +444,7 @@ function App() {
   const [todayTotal, setTodayTotal] = useState(0);
   const [donations, setDonations] = useState([]);
   
-  const [themeMode, setThemeMode] = useState('mangalam'); 
+  const [themeMode, setThemeMode] = useState('surya'); 
   const currentTheme = THEMES[themeMode];
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [deleteConfirmationId, setDeleteConfirmationId] = useState(null);
@@ -546,33 +545,50 @@ function App() {
       }
       const pdfDataUri = generatePDFData(filtered, filterTxt);
       const base64Data = pdfDataUri.split(',')[1];
-      const fileName = `Temple_Report_${Date.now()}.pdf`;
+      const fileName = `Sri_Venkateswara_Swamy_Temple_Report_${Date.now()}.pdf`;
       const savedFile = await Filesystem.writeFile({ path: fileName, data: base64Data, directory: Directory.Documents, recursive: true });
       await Share.share({ title: 'Temple Report', url: savedFile.uri });
       showToast('PDF Generated!');
     } catch (error) { showToast(error.message, 'error'); }
   };
 
+  // --- UPDATED EXPORT LOGIC: Adds Title Rows ---
   const handleExportBackup = async () => {
      try {
         const wb = XLSX.utils.book_new();
         const uniqueDenoms = [...new Set(donations.map(d => d.denomination))].sort((a, b) => a - b);
         if (uniqueDenoms.length === 0) { showToast("No data to export!", 'error'); return; }
+        
         uniqueDenoms.forEach(denom => {
             const sheetRows = donations.filter(d => d.denomination == denom).map(d => ({
                 "Date": formatDateIN(d.date), "Sl No": d.sl_no, "Receipt No": d.receipt_no, "Name & Address": d.donor_name, "Amount": d.amount, "Phone": d.phone
             }));
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows), String(denom));
+            
+            // 1. Create sheet starting at Row 4 (origin: A4)
+            const ws = XLSX.utils.json_to_sheet(sheetRows, { origin: "A4" });
+
+            // 2. Add Title (Row 1) and Subtitle (Row 2)
+            XLSX.utils.sheet_add_aoa(ws, [["SRI VENKATESWARA SWAMY TEMPLE"]], { origin: "A1" });
+            XLSX.utils.sheet_add_aoa(ws, [[`Donation Account - ${denom}`]], { origin: "A2" });
+
+            // 3. Merge Cells (A1:F1 for main title, A2:F2 for subtitle)
+            ws['!merges'] = [
+              { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }, // Row 1 Merge
+              { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } }  // Row 2 Merge
+            ];
+
+            XLSX.utils.book_append_sheet(wb, ws, String(denom));
         });
+
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
-        const fileName = `Temple_Backup_${getTodayStr()}.xlsx`;
+        const fileName = `Sri_Venkateswara_Swamy_Temple_Account_${getTodayStr()}.xlsx`;
+        
         const savedFile = await Filesystem.writeFile({ path: fileName, data: wbout, directory: Directory.Cache, recursive: true });
         await Share.share({ title: 'Temple Backup', url: savedFile.uri });
         showToast('Backup Created!');
     } catch (error) { showToast("Export Failed", 'error'); }
   };
 
-  // --- SMART IMPORT LOGIC 2.2 (Added 'RECIEPT' typo support) ---
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -616,8 +632,6 @@ function App() {
                 };
 
                 const sl = getValue('slno') || getValue('sl') || getValue('serial') || getValue('s.no');
-                
-                // UPDATED: Added 'reciept' (typo) to the dictionary
                 const rcpt = getValue('receipt') || getValue('recept') || getValue('reciept') || getValue('rcpt') || 'Pending';
                 
                 const name = getValue('name') || getValue('donor') || "To be updated";
@@ -700,8 +714,8 @@ function App() {
       <div className={`flex-none ${currentTheme.inputBg}/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b ${currentTheme.border} flex items-center gap-3 shadow-sm transition-colors duration-500`}>
          <button onClick={() => {
             triggerHaptic();
-            setThemeMode(prev => prev === 'mangalam' ? 'ekantam' : 'mangalam');
-            showToast(`Theme: ${themeMode === 'mangalam' ? 'Ekantam' : 'Mangalam'}`);
+            setThemeMode(prev => prev === 'surya' ? 'chandra' : 'surya');
+            showToast(`Theme: ${themeMode === 'surya' ? 'Chandra (Night)' : 'Surya (Day)'}`);
          }}>
              <img 
                src="/logo.png" 
