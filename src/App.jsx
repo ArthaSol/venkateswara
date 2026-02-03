@@ -8,12 +8,12 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Browser } from '@capacitor/browser'; 
 
 // --- APP VERSION CONTROL ---
-const APP_VERSION = "1.6"; // PERFORMANCE RELEASE (Virtual Scrolling)
+const APP_VERSION = "1.7"; // FEATURE RELEASE (Phone Support)
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/ArthaSol/venkateswara/main/version.json";
 
 // --- CONSTANTS FOR VIRTUAL SCROLLING ---
-const ITEM_HEIGHT = 180; // Fixed height for each card in pixels
-const OVERSCAN = 5;      // Buffer items to render above/below view
+const ITEM_HEIGHT = 180; // Fixed height (Keep this consistent for smooth scrolling)
+const OVERSCAN = 5;      
 
 // --- THEME ENGINE ---
 const THEMES = {
@@ -94,7 +94,8 @@ const Icons = {
   Edit: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
   Trash: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
   Plus: () => <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>,
-  Update: () => <svg className="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+  Update: () => <svg className="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>,
+  Phone: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
 };
 
 // ==========================================
@@ -103,7 +104,6 @@ const Icons = {
 const Toast = ({ show, message, type }) => {
   if (!show) return null;
   const borderClass = type === 'error' ? 'border-red-500 text-red-700' : 'border-green-500 text-green-800';
-  
   return (
     <div className={`fixed bottom-24 left-4 right-4 z-[100] flex items-center gap-3 px-6 py-4 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] bg-white/95 backdrop-blur-md border-l-8 ${borderClass} animate-slide-up`}>
       <span className="text-xl">{type === 'error' ? '⚠️' : '✅'}</span>
@@ -211,7 +211,6 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
   const [scrollTop, setScrollTop] = useState(0);
   const containerRef = useRef(null);
 
-  // Helper: Safe Date Formatter
   const safeFormatDate = (dateStr) => {
     if (!dateStr || typeof dateStr !== 'string') return "";
     try {
@@ -221,15 +220,15 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
     } catch (e) { return ""; }
   };
 
-  // 1. FILTERING
   const filtered = useMemo(() => {
     return donations.filter(d => {
        try {
          const safeName = String(d.donor_name || "").toLowerCase(); 
          const safeReceipt = String(d.receipt_no || "").toLowerCase();
+         const safePhone = String(d.phone || "").toLowerCase(); // NEW: Filter by phone
          const term = (searchTerm || "").toLowerCase();
 
-         const matchesSearch = safeName.includes(term) || safeReceipt.includes(term);
+         const matchesSearch = safeName.includes(term) || safeReceipt.includes(term) || safePhone.includes(term);
          
          let matchesDenom = true;
          if (filterDenom !== "") {
@@ -240,10 +239,8 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
     });
   }, [donations, searchTerm, filterDenom]);
 
-  // 2. VIRTUALIZATION MATH
   const totalHeight = filtered.length * ITEM_HEIGHT;
   const startIndex = Math.floor(scrollTop / ITEM_HEIGHT);
-  // Render enough items to fill screen + buffer
   const endIndex = Math.min(
     filtered.length, 
     startIndex + Math.ceil((window.innerHeight) / ITEM_HEIGHT) + OVERSCAN
@@ -256,13 +253,18 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
     setScrollTop(e.target.scrollTop);
   };
 
+  const handleCall = (e, phone) => {
+    e.stopPropagation(); // Stop click from triggering anything else
+    if (!phone) return;
+    window.open(`tel:${phone}`, '_system');
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* HEADER: FIXED (Does not scroll) */}
       <div className={`flex-none ${currentTheme.bg} pt-2 pb-4 z-10 transition-colors duration-300`}>
          <input 
            type="text" 
-           placeholder="Search Name or Receipt No..." 
+           placeholder="Search Name, Receipt, or Phone..." 
            value={searchTerm} 
            onChange={e => setSearchTerm(e.target.value)} 
            className={`w-full ${currentTheme.inputBg} ${currentTheme.textPrimary} border-none shadow-sm p-4 rounded-xl font-medium outline-none focus:ring-2 focus:ring-orange-200 placeholder-gray-400`}
@@ -275,16 +277,12 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
          </div>
       </div>
 
-      {/* VIRTUAL SCROLL CONTAINER */}
       <div 
          className="flex-1 overflow-y-auto relative pb-32" 
          onScroll={onScroll} 
          ref={containerRef}
       >
-        {/* TOTAL HEIGHT PHANTOM CONTAINER */}
         <div style={{ height: totalHeight, position: 'relative' }}>
-            
-            {/* VISIBLE ITEMS WINDOW */}
             <div style={{ transform: `translateY(${offsetY}px)`, position: 'absolute', top: 0, left: 0, right: 0 }}>
                 {visibleItems.length === 0 && (
                    <div className="text-center py-10 opacity-50">
@@ -295,16 +293,15 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
 
                 {visibleItems.map(item => (
                   <div key={item.id} style={{ height: ITEM_HEIGHT - 12, marginBottom: '12px' }} className={`${currentTheme.inputBg} rounded-xl p-4 shadow-sm border ${currentTheme.border} relative overflow-hidden group flex flex-col justify-between`}>
-                     
                      <button onClick={()=>handleDelete(item.id)} className="absolute top-0 right-0 p-3 bg-red-50 text-red-500 rounded-bl-xl z-20 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Icons.Trash />
                      </button>
-                     
                      <div className="flex justify-between items-start pr-10">
                         <div className="overflow-hidden">
                           <span className={`text-xs font-bold ${currentTheme.textSecondary} bg-opacity-10 bg-gray-500 px-2 py-0.5 rounded mr-2 inline-block mb-1`}>#{item.receipt_no}</span>
-                          {/* TRUNCATE LONG NAMES */}
                           <h3 className={`font-bold ${currentTheme.textPrimary} text-lg leading-tight line-clamp-2`}>{item.donor_name || "Unknown"}</h3>
+                          {/* SHOW PHONE IF EXISTS */}
+                          {item.phone && <p className={`text-xs ${currentTheme.textSecondary} mt-1 flex items-center gap-1`}>📞 {item.phone}</p>}
                         </div>
                         <div className="text-right flex-shrink-0 ml-2">
                           <span className="block font-black text-xl text-green-600">₹{formatCurrencyIN(item.amount)}</span>
@@ -312,9 +309,17 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
                         </div>
                      </div>
                      
-                     <button onClick={()=>openEdit(item)} className="w-full mt-2 py-2 bg-blue-50 text-blue-600 font-bold rounded-lg text-sm flex items-center justify-center gap-2 hover:bg-blue-100">
-                        <Icons.Edit /> Edit Details
-                     </button>
+                     <div className="flex gap-2 mt-2">
+                        {/* CALL BUTTON (Only if phone exists) */}
+                        {item.phone && (
+                            <button onClick={(e)=>handleCall(e, item.phone)} className="flex-none px-4 py-2 bg-green-50 text-green-600 font-bold rounded-lg text-sm flex items-center justify-center gap-1 hover:bg-green-100">
+                                <Icons.Phone /> Call
+                            </button>
+                        )}
+                        <button onClick={()=>openEdit(item)} className="flex-1 py-2 bg-blue-50 text-blue-600 font-bold rounded-lg text-sm flex items-center justify-center gap-2 hover:bg-blue-100">
+                            <Icons.Edit /> Edit
+                        </button>
+                     </div>
                   </div>
                 ))}
             </div>
@@ -383,6 +388,17 @@ const TransactionSheet = ({ formMode, formData, setFormData, setFormMode, handle
               placeholder="Enter name..."
             ></textarea>
           </div>
+          {/* NEW PHONE INPUT */}
+          <div>
+            <label className="text-xs font-bold text-gray-500 uppercase">Phone Number</label>
+            <input 
+               type="tel" 
+               value={formData.phone || ''} 
+               onChange={(e) => setFormData({...formData, phone: e.target.value})} 
+               className="w-full border-2 border-gray-100 p-3 rounded-xl font-medium"
+               placeholder="98480..."
+            />
+          </div>
           <div>
             <label className="text-xs font-bold text-gray-500 uppercase">Date</label>
             <input type="date" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className="w-full border-2 border-gray-100 p-3 rounded-xl font-medium"/>
@@ -432,21 +448,15 @@ function App() {
   const [todayTotal, setTodayTotal] = useState(0);
   const [donations, setDonations] = useState([]);
   
-  // Theme State
-  const [themeMode, setThemeMode] = useState('mangalam'); // Default
+  const [themeMode, setThemeMode] = useState('mangalam'); 
   const currentTheme = THEMES[themeMode];
-
-  // Toast State
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
-  
-  // Sheet States
   const [deleteConfirmationId, setDeleteConfirmationId] = useState(null);
   const [updateAvailable, setUpdateAvailable] = useState(null);
-
   const [formMode, setFormMode] = useState(null);
-  const [formData, setFormData] = useState({ id: null, donor_name: '', denomination: '100', amount: '100', sl_no: '', receipt_no: '', date: '' });
+  // UPDATED STATE: Include phone
+  const [formData, setFormData] = useState({ id: null, donor_name: '', denomination: '100', amount: '100', sl_no: '', receipt_no: '', date: '', phone: '' });
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
-
   const DENOMINATIONS = [100, 200, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
 
   useEffect(() => {
@@ -484,7 +494,7 @@ function App() {
 
   const openAdd = () => {
     triggerHaptic();
-    setFormData({ id: null, donor_name: '', denomination: '100', amount: '100', sl_no: '', receipt_no: '', date: getTodayStr() });
+    setFormData({ id: null, donor_name: '', denomination: '100', amount: '100', sl_no: '', receipt_no: '', date: getTodayStr(), phone: '' });
     setFormMode('ADD');
   };
 
@@ -494,7 +504,6 @@ function App() {
     setFormMode('EDIT'); 
   };
 
-  // HANDLER FOR DELETE
   const handleRequestDelete = (id) => {
     setDeleteConfirmationId(id);
     triggerHaptic();
@@ -503,14 +512,16 @@ function App() {
   const handleSave = async (e) => {
     e.preventDefault();
     const db = await getDB();
-    const { id, donor_name, denomination, sl_no, receipt_no, date, amount } = formData;
+    // UPDATED SAVE LOGIC: Include phone
+    const { id, donor_name, denomination, sl_no, receipt_no, date, amount, phone } = formData;
     const finalAmount = parseFloat(amount) || 0;
     
+    // DB MIGRATION NOTE: Since user will uninstall, we can assume 'phone' column exists.
     if (formMode === 'EDIT') {
-      await db.run("UPDATE donations SET donor_name=?, amount=?, denomination=?, sl_no=?, receipt_no=?, date=? WHERE id=?", [donor_name, finalAmount, denomination, sl_no, receipt_no, date, id]);
+      await db.run("UPDATE donations SET donor_name=?, amount=?, denomination=?, sl_no=?, receipt_no=?, date=?, phone=? WHERE id=?", [donor_name, finalAmount, denomination, sl_no, receipt_no, date, phone, id]);
       showToast('Receipt Updated!');
     } else {
-      await db.run("INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)", [date, donor_name, finalAmount, 'CREDIT', denomination, sl_no, receipt_no]);
+      await db.run("INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [date, donor_name, finalAmount, 'CREDIT', denomination, sl_no, receipt_no, phone]);
       showToast('Receipt Saved Successfully!');
     }
     triggerHaptic();
@@ -555,7 +566,7 @@ function App() {
         if (uniqueDenoms.length === 0) { showToast("No data to export!", 'error'); return; }
         uniqueDenoms.forEach(denom => {
             const sheetRows = donations.filter(d => d.denomination == denom).map(d => ({
-                "Date": formatDateIN(d.date), "Sl No": d.sl_no, "Receipt No": d.receipt_no, "Name & Address": d.donor_name, "Amount": d.amount
+                "Date": formatDateIN(d.date), "Sl No": d.sl_no, "Receipt No": d.receipt_no, "Name & Address": d.donor_name, "Amount": d.amount, "Phone": d.phone
             }));
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows), String(denom));
         });
@@ -567,7 +578,7 @@ function App() {
     } catch (error) { showToast("Export Failed", 'error'); }
   };
 
-  // --- SMART IMPORT LOGIC ---
+  // --- SMART IMPORT LOGIC 2.0 (With Phone) ---
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -579,8 +590,6 @@ function App() {
           const wb = XLSX.read(bstr, { type: 'binary' });
           const db = await getDB();
           let count = 0;
-
-          // HELPER: Normalize keys to find matches easily
           const normalize = (str) => String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
 
           for (const sheetName of wb.SheetNames) {
@@ -588,30 +597,27 @@ function App() {
             const sheetDenomFallback = parseInt(cleanSheetName);
             const ws = wb.Sheets[sheetName];
             
-            // Convert sheet to JSON array of arrays (header: 1) to find the header row manually
             const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 });
             if (!rawData || rawData.length === 0) continue;
 
-            // 1. Find the Header Row (Look for a row containing "slno" or "receiptno")
             let headerRowIndex = 0;
             let headers = [];
             
             for (let i = 0; i < Math.min(rawData.length, 10); i++) {
-                const row = rawData[i].map(cell => normalize(cell)); // Normalize this row
+                const row = rawData[i].map(cell => normalize(cell)); 
                 if (row.includes('slno') || row.includes('receiptno') || row.includes('name')) {
                     headerRowIndex = i;
-                    headers = row; // Store the normalized headers
+                    headers = row;
                     break;
                 }
             }
 
-            // 2. Process Data Rows (Starting after the header)
             for (let i = headerRowIndex + 1; i < rawData.length; i++) {
                 const row = rawData[i];
                 if (!row || row.length === 0) continue;
 
-                // Map row data using the normalized headers we found
                 const getValue = (keyPart) => {
+                    // Smart Search: Looks for "mobile" OR "phone" in headers
                     const idx = headers.findIndex(h => h && h.includes(keyPart));
                     return idx !== -1 ? row[idx] : null;
                 };
@@ -622,7 +628,12 @@ function App() {
                 const rawDate = getValue('date');
                 const date = parseExcelDate(rawDate);
                 
-                // Denomination Logic
+                // PHONE EXTRACTION LOGIC
+                // 1. Look for 'phone' or 'mobile' in headers
+                let phoneRaw = getValue('phone') || getValue('mobile') || getValue('contact') || "";
+                // 2. Clean it (Remove spaces, dashes)
+                const phone = String(phoneRaw).replace(/[^0-9]/g, '');
+
                 let finalDenom = 0;
                 const denomVal = getValue('denomination');
                 if (denomVal) finalDenom = parseInt(denomVal);
@@ -630,7 +641,6 @@ function App() {
 
                 if (!finalDenom || finalDenom === 0) continue;
 
-                // Amount Logic
                 let finalAmount = 0;
                 const amtVal = getValue('amount');
                 if (amtVal) {
@@ -639,15 +649,13 @@ function App() {
                     if (parsed > 0) finalAmount = parsed;
                 }
                 
-                // Fallback: If no amount column, assume Amount = Denomination
                 if (finalAmount === 0 && sl) finalAmount = finalDenom;
-
-                // Final Validation before Insert
                 if (!sl && finalAmount === 0) continue; 
 
                 if (finalAmount > 0) {
-                   await db.run(`INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no) VALUES (?, ?, ?, ?, ?, ?, ?)`, 
-                     [date, name, finalAmount, 'CREDIT', finalDenom, sl || 'Pending', rcpt]);
+                   // UPDATED INSERT: Include phone
+                   await db.run(`INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, 
+                     [date, name, finalAmount, 'CREDIT', finalDenom, sl || 'Pending', rcpt, phone]);
                    count++;
                 }
             }
@@ -697,7 +705,6 @@ function App() {
     <div className={`fixed inset-0 ${currentTheme.bg} font-sans transition-colors duration-500 overflow-hidden flex flex-col`}>
       <Toast show={toast.show} message={toast.message} type={toast.type} />
 
-      {/* HEADER */}
       <div className={`flex-none ${currentTheme.inputBg}/90 backdrop-blur-md z-20 pt-12 pb-3 px-4 border-b ${currentTheme.border} flex items-center gap-3 shadow-sm transition-colors duration-500`}>
          <button onClick={() => {
             triggerHaptic();
