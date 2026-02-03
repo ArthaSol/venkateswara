@@ -8,7 +8,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Browser } from '@capacitor/browser'; 
 
 // --- APP VERSION CONTROL ---
-const APP_VERSION = "1.7"; // FEATURE RELEASE (Phone Support)
+const APP_VERSION = "1.7.1"; // PATCH: Fix for 'RECEPT' typo in Excel
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/ArthaSol/venkateswara/main/version.json";
 
 // --- CONSTANTS FOR VIRTUAL SCROLLING ---
@@ -225,7 +225,7 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
        try {
          const safeName = String(d.donor_name || "").toLowerCase(); 
          const safeReceipt = String(d.receipt_no || "").toLowerCase();
-         const safePhone = String(d.phone || "").toLowerCase(); // NEW: Filter by phone
+         const safePhone = String(d.phone || "").toLowerCase(); 
          const term = (searchTerm || "").toLowerCase();
 
          const matchesSearch = safeName.includes(term) || safeReceipt.includes(term) || safePhone.includes(term);
@@ -254,7 +254,7 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
   };
 
   const handleCall = (e, phone) => {
-    e.stopPropagation(); // Stop click from triggering anything else
+    e.stopPropagation(); 
     if (!phone) return;
     window.open(`tel:${phone}`, '_system');
   };
@@ -300,7 +300,6 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
                         <div className="overflow-hidden">
                           <span className={`text-xs font-bold ${currentTheme.textSecondary} bg-opacity-10 bg-gray-500 px-2 py-0.5 rounded mr-2 inline-block mb-1`}>#{item.receipt_no}</span>
                           <h3 className={`font-bold ${currentTheme.textPrimary} text-lg leading-tight line-clamp-2`}>{item.donor_name || "Unknown"}</h3>
-                          {/* SHOW PHONE IF EXISTS */}
                           {item.phone && <p className={`text-xs ${currentTheme.textSecondary} mt-1 flex items-center gap-1`}>📞 {item.phone}</p>}
                         </div>
                         <div className="text-right flex-shrink-0 ml-2">
@@ -310,7 +309,6 @@ const LedgerScreen = ({ donations, DENOMINATIONS, handleDelete, openEdit, curren
                      </div>
                      
                      <div className="flex gap-2 mt-2">
-                        {/* CALL BUTTON (Only if phone exists) */}
                         {item.phone && (
                             <button onClick={(e)=>handleCall(e, item.phone)} className="flex-none px-4 py-2 bg-green-50 text-green-600 font-bold rounded-lg text-sm flex items-center justify-center gap-1 hover:bg-green-100">
                                 <Icons.Phone /> Call
@@ -388,7 +386,6 @@ const TransactionSheet = ({ formMode, formData, setFormData, setFormMode, handle
               placeholder="Enter name..."
             ></textarea>
           </div>
-          {/* NEW PHONE INPUT */}
           <div>
             <label className="text-xs font-bold text-gray-500 uppercase">Phone Number</label>
             <input 
@@ -454,7 +451,6 @@ function App() {
   const [deleteConfirmationId, setDeleteConfirmationId] = useState(null);
   const [updateAvailable, setUpdateAvailable] = useState(null);
   const [formMode, setFormMode] = useState(null);
-  // UPDATED STATE: Include phone
   const [formData, setFormData] = useState({ id: null, donor_name: '', denomination: '100', amount: '100', sl_no: '', receipt_no: '', date: '', phone: '' });
   const [isReportSheetOpen, setIsReportSheetOpen] = useState(false);
   const DENOMINATIONS = [100, 200, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
@@ -512,11 +508,9 @@ function App() {
   const handleSave = async (e) => {
     e.preventDefault();
     const db = await getDB();
-    // UPDATED SAVE LOGIC: Include phone
     const { id, donor_name, denomination, sl_no, receipt_no, date, amount, phone } = formData;
     const finalAmount = parseFloat(amount) || 0;
     
-    // DB MIGRATION NOTE: Since user will uninstall, we can assume 'phone' column exists.
     if (formMode === 'EDIT') {
       await db.run("UPDATE donations SET donor_name=?, amount=?, denomination=?, sl_no=?, receipt_no=?, date=?, phone=? WHERE id=?", [donor_name, finalAmount, denomination, sl_no, receipt_no, date, phone, id]);
       showToast('Receipt Updated!');
@@ -578,7 +572,7 @@ function App() {
     } catch (error) { showToast("Export Failed", 'error'); }
   };
 
-  // --- SMART IMPORT LOGIC 2.0 (With Phone) ---
+  // --- SMART IMPORT LOGIC 2.1 (Typo Fixes) ---
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -617,21 +611,21 @@ function App() {
                 if (!row || row.length === 0) continue;
 
                 const getValue = (keyPart) => {
-                    // Smart Search: Looks for "mobile" OR "phone" in headers
                     const idx = headers.findIndex(h => h && h.includes(keyPart));
                     return idx !== -1 ? row[idx] : null;
                 };
 
-                const sl = getValue('slno');
-                const rcpt = getValue('receiptno') || 'Pending';
+                // UPDATED: Look for 'sl', 'serial', or 'slno'
+                const sl = getValue('slno') || getValue('sl') || getValue('serial') || getValue('s.no');
+                
+                // UPDATED: Look for 'receipt', 'recept' (typo), or 'rcpt'
+                const rcpt = getValue('receipt') || getValue('recept') || getValue('rcpt') || 'Pending';
+                
                 const name = getValue('name') || getValue('donor') || "To be updated";
                 const rawDate = getValue('date');
                 const date = parseExcelDate(rawDate);
                 
-                // PHONE EXTRACTION LOGIC
-                // 1. Look for 'phone' or 'mobile' in headers
                 let phoneRaw = getValue('phone') || getValue('mobile') || getValue('contact') || "";
-                // 2. Clean it (Remove spaces, dashes)
                 const phone = String(phoneRaw).replace(/[^0-9]/g, '');
 
                 let finalDenom = 0;
@@ -653,7 +647,6 @@ function App() {
                 if (!sl && finalAmount === 0) continue; 
 
                 if (finalAmount > 0) {
-                   // UPDATED INSERT: Include phone
                    await db.run(`INSERT INTO donations (date, donor_name, amount, type, denomination, sl_no, receipt_no, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, 
                      [date, name, finalAmount, 'CREDIT', finalDenom, sl || 'Pending', rcpt, phone]);
                    count++;
