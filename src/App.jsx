@@ -8,7 +8,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Browser } from '@capacitor/browser'; 
 
 // --- APP VERSION CONTROL ---
-const APP_VERSION = "1.7.1"; // PATCH: Fix for 'RECEPT' typo in Excel
+const APP_VERSION = "1.7.2"; // PATCH: Added support for 'RECIEPT' typo
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/ArthaSol/venkateswara/main/version.json";
 
 // --- CONSTANTS FOR VIRTUAL SCROLLING ---
@@ -572,7 +572,7 @@ function App() {
     } catch (error) { showToast("Export Failed", 'error'); }
   };
 
-  // --- SMART IMPORT LOGIC 2.1 (Typo Fixes) ---
+  // --- SMART IMPORT LOGIC 2.2 (Added 'RECIEPT' typo support) ---
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -615,11 +615,10 @@ function App() {
                     return idx !== -1 ? row[idx] : null;
                 };
 
-                // UPDATED: Look for 'sl', 'serial', or 'slno'
                 const sl = getValue('slno') || getValue('sl') || getValue('serial') || getValue('s.no');
                 
-                // UPDATED: Look for 'receipt', 'recept' (typo), or 'rcpt'
-                const rcpt = getValue('receipt') || getValue('recept') || getValue('rcpt') || 'Pending';
+                // UPDATED: Added 'reciept' (typo) to the dictionary
+                const rcpt = getValue('receipt') || getValue('recept') || getValue('reciept') || getValue('rcpt') || 'Pending';
                 
                 const name = getValue('name') || getValue('donor') || "To be updated";
                 const rawDate = getValue('date');
